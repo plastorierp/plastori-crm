@@ -1,0 +1,1720 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plastori CRM</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+
+:root {
+  --brand-primary: #E8621A;
+  --brand-dark: #1a1a2e;
+  --brand-darker: #12121f;
+  --brand-gold: #F5A623;
+  --brand-light: #f8f6f3;
+  --surface: #1e1e30;
+  --surface2: #252538;
+  --surface3: #2d2d45;
+  --border: rgba(255,255,255,0.08);
+  --text: #f0ede8;
+  --text-muted: #8b8b9e;
+  --text-dim: #5a5a70;
+  --green: #22c55e;
+  --red: #ef4444;
+  --blue: #3b82f6;
+  --yellow: #f59e0b;
+  --purple: #8b5cf6;
+  --teal: #14b8a6;
+  --sidebar-w: 240px;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 4px 24px rgba(0,0,0,0.4);
+  --transition: 0.2s cubic-bezier(0.4,0,0.2,1);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: 'DM Sans', sans-serif; background: var(--brand-darker); color: var(--text); }
+button { cursor: pointer; font-family: inherit; }
+input, select, textarea { font-family: inherit; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 3px; }
+
+/* ===================== LOGIN ===================== */
+#loginScreen {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100vh;
+  background: radial-gradient(ellipse at 30% 50%, rgba(232,98,26,0.15) 0%, transparent 60%),
+              radial-gradient(ellipse at 70% 20%, rgba(245,166,35,0.08) 0%, transparent 50%),
+              var(--brand-darker);
+}
+.login-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 48px 40px;
+  width: 100%; max-width: 400px;
+  box-shadow: var(--shadow);
+}
+.login-logo { text-align: center; margin-bottom: 32px; }
+.login-logo img { width: 80px; height: 80px; object-fit: contain; }
+.login-logo h1 { font-size: 22px; font-weight: 700; color: var(--text); margin-top: 12px; letter-spacing: 2px; }
+.login-logo p { color: var(--text-muted); font-size: 13px; margin-top: 4px; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+.form-control {
+  width: 100%; padding: 12px 16px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text); font-size: 14px;
+  transition: border-color var(--transition);
+  outline: none;
+}
+.form-control:focus { border-color: var(--brand-primary); }
+.btn-primary {
+  width: 100%; padding: 13px;
+  background: var(--brand-primary); color: #fff;
+  border: none; border-radius: var(--radius-sm);
+  font-size: 14px; font-weight: 600; letter-spacing: 0.5px;
+  transition: all var(--transition);
+}
+.btn-primary:hover { background: #d45510; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(232,98,26,0.4); }
+.login-error { color: var(--red); font-size: 12px; text-align: center; margin-top: 12px; min-height: 18px; }
+.login-hint { color: var(--text-dim); font-size: 11px; text-align: center; margin-top: 16px; }
+
+/* ===================== APP SHELL ===================== */
+#appShell { display: none; flex-direction: row; height: 100vh; overflow: hidden; }
+
+/* ===================== SIDEBAR ===================== */
+#sidebar {
+  width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto; overflow-x: hidden;
+  transition: width var(--transition);
+}
+.sidebar-header { padding: 20px 16px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); }
+.sidebar-header img { width: 36px; height: 36px; object-fit: contain; flex-shrink: 0; }
+.sidebar-brand { font-size: 14px; font-weight: 700; letter-spacing: 1.5px; color: var(--text); }
+.sidebar-brand small { display: block; font-size: 10px; font-weight: 400; color: var(--text-dim); letter-spacing: 0; }
+nav { flex: 1; padding: 12px 8px; }
+.nav-section { margin-bottom: 20px; }
+.nav-label { font-size: 10px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; padding: 0 8px; margin-bottom: 6px; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text-muted);
+  transition: all var(--transition); position: relative; white-space: nowrap;
+  border: none; background: none; width: 100%; text-align: left;
+}
+.nav-item:hover { background: var(--surface2); color: var(--text); }
+.nav-item.active { background: rgba(232,98,26,0.15); color: var(--brand-primary); }
+.nav-item.active .nav-icon { color: var(--brand-primary); }
+.nav-icon { font-size: 16px; flex-shrink: 0; width: 20px; text-align: center; }
+.sidebar-footer { padding: 12px 8px; border-top: 1px solid var(--border); }
+.user-card {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  background: var(--surface2);
+}
+.user-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--brand-primary); display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: white; flex-shrink: 0;
+}
+.user-info { flex: 1; min-width: 0; }
+.user-name { font-size: 12px; font-weight: 600; color: var(--text); truncate; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.user-role { font-size: 10px; color: var(--text-muted); }
+.btn-logout { background: none; border: none; color: var(--text-muted); font-size: 14px; padding: 4px; cursor: pointer; }
+.btn-logout:hover { color: var(--red); }
+
+/* ===================== MAIN ===================== */
+#main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+#topbar {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 12px 24px; display: flex; align-items: center; justify-content: space-between;
+  flex-shrink: 0;
+}
+.topbar-title { font-size: 18px; font-weight: 700; }
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+.search-box {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 20px; padding: 8px 14px;
+}
+.search-box input { background: none; border: none; color: var(--text); font-size: 13px; width: 200px; outline: none; }
+.search-box input::placeholder { color: var(--text-dim); }
+#mainContent { flex: 1; overflow-y: auto; padding: 24px; }
+
+/* ===================== CARDS / STATS ===================== */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.stat-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 20px; position: relative; overflow: hidden;
+}
+.stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--accent, var(--brand-primary)); }
+.stat-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-value { font-size: 28px; font-weight: 700; margin: 6px 0 2px; color: var(--text); }
+.stat-sub { font-size: 12px; color: var(--text-muted); }
+.stat-icon { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); font-size: 32px; opacity: 0.15; }
+
+/* ===================== CHARTS ===================== */
+.charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+.chart-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px;
+}
+.chart-title { font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.5px; }
+.chart-wrap { position: relative; height: 220px; }
+
+/* ===================== TABLE ===================== */
+.table-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.table-header { padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+.table-title { font-size: 14px; font-weight: 600; }
+.table-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead th { background: var(--surface2); padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
+tbody tr { border-bottom: 1px solid var(--border); transition: background var(--transition); }
+tbody tr:hover { background: var(--surface2); }
+tbody td { padding: 10px 14px; color: var(--text); white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.table-pagination { padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted); }
+.pagination-btns { display: flex; gap: 4px; }
+.pg-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+.pg-btn:hover, .pg-btn.active { background: var(--brand-primary); border-color: var(--brand-primary); color: white; }
+
+/* ===================== STATUS BADGES ===================== */
+.badge {
+  display: inline-flex; align-items: center; padding: 3px 10px;
+  border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap;
+}
+.badge-green { background: rgba(34,197,94,0.15); color: #22c55e; }
+.badge-red { background: rgba(239,68,68,0.15); color: #ef4444; }
+.badge-blue { background: rgba(59,130,246,0.15); color: #60a5fa; }
+.badge-yellow { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.badge-purple { background: rgba(139,92,246,0.15); color: #a78bfa; }
+.badge-gray { background: rgba(107,114,128,0.15); color: #9ca3af; }
+.badge-orange { background: rgba(232,98,26,0.15); color: var(--brand-primary); }
+
+/* ===================== BUTTONS ===================== */
+.btn { padding: 8px 16px; border-radius: var(--radius-sm); border: none; font-size: 13px; font-weight: 500; cursor: pointer; transition: all var(--transition); display: inline-flex; align-items: center; gap: 6px; }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn-brand { background: var(--brand-primary); color: white; }
+.btn-brand:hover { background: #d45510; transform: translateY(-1px); }
+.btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.btn-ghost:hover { background: var(--surface3); }
+.btn-danger { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+.btn-danger:hover { background: rgba(239,68,68,0.25); }
+.btn-success { background: rgba(34,197,94,0.15); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
+.btn-success:hover { background: rgba(34,197,94,0.25); }
+
+/* ===================== FILTERS ===================== */
+.filters-bar { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+.filter-select {
+  background: var(--surface); border: 1px solid var(--border); color: var(--text);
+  padding: 8px 12px; border-radius: var(--radius-sm); font-size: 13px;
+  outline: none; cursor: pointer;
+}
+.filter-input {
+  background: var(--surface); border: 1px solid var(--border); color: var(--text);
+  padding: 8px 12px; border-radius: var(--radius-sm); font-size: 13px;
+  outline: none;
+}
+.filter-input::placeholder { color: var(--text-dim); }
+
+/* ===================== MODAL ===================== */
+.modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7); z-index: 1000;
+  align-items: center; justify-content: center; padding: 20px;
+  backdrop-filter: blur(4px);
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  width: 100%; max-width: 640px; max-height: 90vh; overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  animation: modalIn 0.2s ease;
+}
+@keyframes modalIn { from { transform: scale(0.95) translateY(10px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
+.modal-header { padding: 20px 24px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+.modal-title { font-size: 16px; font-weight: 700; }
+.modal-close { background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer; line-height: 1; }
+.modal-body { padding: 24px; }
+.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.form-grid .full { grid-column: 1/-1; }
+label.field-label { display: block; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.field { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; width: 100%; color: var(--text); font-size: 13px; outline: none; }
+.field:focus { border-color: var(--brand-primary); }
+textarea.field { resize: vertical; min-height: 80px; }
+
+/* ===================== FUNIL ===================== */
+.funnel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.funnel-col { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.funnel-head { padding: 12px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between; }
+.funnel-count { background: var(--surface2); border-radius: 20px; padding: 2px 8px; font-size: 10px; }
+.funnel-body { padding: 8px; max-height: 400px; overflow-y: auto; }
+.funnel-card {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; cursor: pointer;
+  transition: all var(--transition);
+}
+.funnel-card:hover { border-color: var(--brand-primary); transform: translateY(-1px); }
+.funnel-card-company { font-size: 12px; font-weight: 600; color: var(--text); }
+.funnel-card-product { font-size: 11px; color: var(--text-muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.funnel-card-value { font-size: 12px; color: var(--green); margin-top: 4px; font-weight: 600; }
+
+/* ===================== RANKING ===================== */
+.ranking-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px; background: var(--surface2); border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+}
+.rank-num { font-size: 18px; font-weight: 700; color: var(--brand-primary); width: 28px; flex-shrink: 0; }
+.rank-info { flex: 1; }
+.rank-name { font-size: 14px; font-weight: 600; }
+.rank-sub { font-size: 11px; color: var(--text-muted); }
+.rank-value { font-size: 14px; font-weight: 700; color: var(--green); }
+.progress-bar { height: 4px; background: var(--surface3); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--brand-primary); border-radius: 2px; transition: width 0.8s ease; }
+
+/* ===================== TOAST ===================== */
+#toastContainer { position: fixed; bottom: 24px; right: 24px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+.toast {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 16px; font-size: 13px; box-shadow: var(--shadow);
+  display: flex; align-items: center; gap: 10px; min-width: 250px;
+  animation: slideIn 0.3s ease; border-left: 3px solid var(--brand-primary);
+}
+.toast.success { border-color: var(--green); }
+.toast.error { border-color: var(--red); }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+/* ===================== SECTION HEADERS ===================== */
+.section-title { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+.section-sub { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; }
+.divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+/* ===================== TABS ===================== */
+.tabs { display: flex; gap: 4px; background: var(--surface2); padding: 4px; border-radius: 10px; width: fit-content; margin-bottom: 20px; }
+.tab { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--text-muted); cursor: pointer; border: none; background: none; transition: all var(--transition); }
+.tab.active { background: var(--brand-primary); color: white; }
+
+/* ===================== ADMIN ===================== */
+.admin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.admin-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+.admin-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.user-list-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; background: var(--surface2); margin-bottom: 6px; }
+.user-list-name { flex: 1; font-size: 13px; }
+.user-list-role { font-size: 11px; color: var(--text-muted); }
+.log-item { padding: 8px 10px; border-left: 2px solid var(--border); margin-bottom: 6px; font-size: 12px; color: var(--text-muted); }
+.log-time { font-size: 10px; color: var(--text-dim); font-family: 'DM Mono', monospace; }
+
+/* ===================== TASK ===================== */
+.task-item { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--surface2); border-radius: 8px; margin-bottom: 6px; }
+.task-check { width: 18px; height: 18px; border-radius: 4px; border: 2px solid var(--border); cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.task-check.done { background: var(--green); border-color: var(--green); }
+.task-info { flex: 1; }
+.task-title { font-size: 13px; font-weight: 500; }
+.task-meta { font-size: 11px; color: var(--text-muted); }
+.task-date { font-size: 11px; color: var(--text-dim); font-family: 'DM Mono', monospace; }
+
+/* ===================== EMPTY STATE ===================== */
+.empty-state { text-align: center; padding: 48px 20px; color: var(--text-muted); }
+.empty-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.4; }
+.empty-text { font-size: 14px; }
+
+/* ===================== RESPONSIVE ===================== */
+@media (max-width: 900px) {
+  .charts-grid { grid-template-columns: 1fr; }
+  .form-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  :root { --sidebar-w: 60px; }
+  .sidebar-brand, .nav-item span, .user-info { display: none; }
+  .nav-item { justify-content: center; padding: 10px; }
+  #mainContent { padding: 16px; }
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* Set password screen */
+#setPasswordScreen {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.85); z-index: 2000;
+  align-items: center; justify-content: center;
+  backdrop-filter: blur(8px);
+}
+#setPasswordScreen.open { display: flex; }
+</style>
+</head>
+<body>
+
+<!-- ==================== LOGIN ==================== -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">
+      <img src="data:image/jpeg;base64,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" alt="Plastori">
+      <h1>PLASTORI</h1>
+      <p>Sistema CRM Profissional</p>
+    </div>
+    <div class="form-group">
+      <label>Usuário</label>
+      <input type="text" id="loginUser" class="form-control" placeholder="Digite seu usuário" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label>Senha</label>
+      <input type="password" id="loginPass" class="form-control" placeholder="Digite sua senha" autocomplete="current-password">
+    </div>
+    <button class="btn-primary" onclick="doLogin()">Entrar</button>
+    <p class="login-error" id="loginError"></p>
+    <p class="login-hint">Primeiro acesso? Use a senha provisória: plastori2025</p>
+  </div>
+</div>
+
+<!-- ==================== SET PASSWORD ==================== -->
+<div id="setPasswordScreen">
+  <div class="login-card">
+    <div class="login-logo">
+      <img src="data:image/jpeg;base64,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" alt="Plastori">
+      <h1>PLASTORI</h1>
+      <p>Definir nova senha</p>
+    </div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;text-align:center;">Bem-vindo(a)! Por favor, defina sua senha pessoal.</p>
+    <div class="form-group">
+      <label>Nova Senha</label>
+      <input type="password" id="newPass1" class="form-control" placeholder="Mínimo 6 caracteres">
+    </div>
+    <div class="form-group">
+      <label>Confirmar Senha</label>
+      <input type="password" id="newPass2" class="form-control" placeholder="Repita a senha">
+    </div>
+    <button class="btn-primary" onclick="setNewPassword()">Salvar Senha</button>
+    <p class="login-error" id="setPassError"></p>
+  </div>
+</div>
+
+<!-- ==================== APP ==================== -->
+<div id="appShell">
+  <!-- SIDEBAR -->
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <img src="data:image/jpeg;base64,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" alt="Plastori">
+      <div class="sidebar-brand">PLASTORI<small>CRM v2.0</small></div>
+    </div>
+    <nav>
+      <div class="nav-section">
+        <div class="nav-label">Principal</div>
+        <button class="nav-item active" onclick="navigate('dashboard')">
+          <span class="nav-icon">📊</span><span>Dashboard</span>
+        </button>
+        <button class="nav-item" onclick="navigate('funil')">
+          <span class="nav-icon">🔀</span><span>Funil de Vendas</span>
+        </button>
+        <button class="nav-item" onclick="navigate('negocios')">
+          <span class="nav-icon">💼</span><span>Negócios</span>
+        </button>
+        <button class="nav-item" onclick="navigate('clientes')">
+          <span class="nav-icon">🏢</span><span>Clientes</span>
+        </button>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">Gestão</div>
+        <button class="nav-item" onclick="navigate('tarefas')">
+          <span class="nav-icon">✅</span><span>Tarefas</span>
+        </button>
+        <button class="nav-item" onclick="navigate('relatorios')">
+          <span class="nav-icon">📈</span><span>Relatórios</span>
+        </button>
+        <button class="nav-item admin-only" onclick="navigate('admin')" style="display:none">
+          <span class="nav-icon">⚙️</span><span>Administração</span>
+        </button>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar" id="userAvatar">?</div>
+        <div class="user-info">
+          <div class="user-name" id="userDisplayName">Usuário</div>
+          <div class="user-role" id="userRoleLabel">Vendedor</div>
+        </div>
+        <button class="btn-logout" onclick="doLogout()" title="Sair">✕</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div id="main">
+    <div id="topbar">
+      <div class="topbar-title" id="pageTitle">Dashboard</div>
+      <div class="topbar-right">
+        <div class="search-box">
+          <span>🔍</span>
+          <input type="text" id="globalSearch" placeholder="Buscar empresa, produto..." oninput="globalSearchFn(this.value)">
+        </div>
+        <button class="btn btn-brand btn-sm" onclick="openAddDeal()">+ Negócio</button>
+      </div>
+    </div>
+    <div id="mainContent"><!-- pages render here --></div>
+  </div>
+</div>
+
+<!-- ==================== ADD/EDIT DEAL MODAL ==================== -->
+<div id="dealModal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="dealModalTitle">Novo Negócio</span>
+      <button class="modal-close" onclick="closeDealModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div>
+          <label class="field-label">Status *</label>
+          <select id="fStatus" class="field">
+            <option value="Prospecção">Prospecção</option>
+            <option value="Orçamento">Orçamento</option>
+            <option value="Aprovado">Aprovado</option>
+            <option value="perdido preço">Perdido por Preço</option>
+            <option value="perdido qtde">Perdido por Qtde</option>
+            <option value="reprovado finan">Reprovado Financeiro</option>
+            <option value="Amostra">Amostra</option>
+          </select>
+        </div>
+        <div>
+          <label class="field-label">Empresa *</label>
+          <input type="text" id="fEmpresa" class="field" placeholder="Nome da empresa">
+        </div>
+        <div>
+          <label class="field-label">Data Inicial</label>
+          <input type="date" id="fDataInicial" class="field">
+        </div>
+        <div>
+          <label class="field-label">Data Final</label>
+          <input type="date" id="fDataFinal" class="field">
+        </div>
+        <div class="full">
+          <label class="field-label">Produto</label>
+          <input type="text" id="fProduto" class="field" placeholder="Descrição do produto">
+        </div>
+        <div>
+          <label class="field-label">Qtde (KG)</label>
+          <input type="number" id="fQtde" class="field" placeholder="0" step="0.01">
+        </div>
+        <div>
+          <label class="field-label">Valor Unit. Cliente (R$)</label>
+          <input type="number" id="fValorCliente" class="field" placeholder="0.00" step="0.01">
+        </div>
+        <div>
+          <label class="field-label">Valor Unit. Mínimo (R$)</label>
+          <input type="number" id="fValorMin" class="field" placeholder="0.00" step="0.01">
+        </div>
+        <div>
+          <label class="field-label">Valor Total (R$)</label>
+          <input type="number" id="fValorTotal" class="field" placeholder="0.00" step="0.01">
+        </div>
+        <div>
+          <label class="field-label">KG Briefing Ideal</label>
+          <input type="number" id="fKGIdeal" class="field" placeholder="0.00" step="0.01">
+        </div>
+        <div>
+          <label class="field-label">Comprador</label>
+          <input type="text" id="fComprador" class="field" placeholder="Nome do comprador">
+        </div>
+        <div>
+          <label class="field-label">Telefone</label>
+          <input type="text" id="fTelefone" class="field" placeholder="(00) 00000-0000">
+        </div>
+        <div>
+          <label class="field-label">E-mail</label>
+          <input type="email" id="fEmail" class="field" placeholder="email@empresa.com">
+        </div>
+        <div>
+          <label class="field-label">Cidade</label>
+          <input type="text" id="fCidade" class="field" placeholder="Cidade">
+        </div>
+        <div>
+          <label class="field-label">Estado</label>
+          <input type="text" id="fEstado" class="field" maxlength="2" placeholder="SP">
+        </div>
+        <div>
+          <label class="field-label">Nº Briefing</label>
+          <input type="text" id="fBriefing" class="field" placeholder="Ex: NAY001">
+        </div>
+        <div>
+          <label class="field-label">Nº Pedido</label>
+          <input type="text" id="fPedido" class="field">
+        </div>
+        <div>
+          <label class="field-label">Nº OP</label>
+          <input type="text" id="fOP" class="field">
+        </div>
+        <div class="full">
+          <label class="field-label">Observação</label>
+          <textarea id="fObs" class="field" placeholder="Histórico, anotações..."></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeDealModal()">Cancelar</button>
+      <button class="btn btn-brand" onclick="saveDeal()">💾 Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== TASK MODAL ==================== -->
+<div id="taskModal" class="modal-overlay">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <span class="modal-title">Nova Tarefa</span>
+      <button class="modal-close" onclick="document.getElementById('taskModal').classList.remove('open')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="field-label">Título *</label>
+        <input type="text" id="tTitle" class="field" style="width:100%" placeholder="Título da tarefa">
+      </div>
+      <div class="form-group" style="margin-top:12px">
+        <label class="field-label">Empresa / Cliente</label>
+        <input type="text" id="tClient" class="field" style="width:100%" placeholder="Nome da empresa">
+      </div>
+      <div class="form-group" style="margin-top:12px">
+        <label class="field-label">Data Limite</label>
+        <input type="date" id="tDate" class="field" style="width:100%">
+      </div>
+      <div class="form-group" style="margin-top:12px">
+        <label class="field-label">Prioridade</label>
+        <select id="tPriority" class="field" style="width:100%">
+          <option value="normal">Normal</option>
+          <option value="alta">Alta</option>
+          <option value="urgente">Urgente</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="document.getElementById('taskModal').classList.remove('open')">Cancelar</button>
+      <button class="btn btn-brand" onclick="saveTask()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div id="toastContainer"></div>
+
+<script>
+// =====================================================================
+// PLASTORI CRM — Main Application Script
+// =====================================================================
+
+const LOGO_B64 = "data:image/jpeg;base64,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";
+
+// =====================================================================
+// DATA STORE — IndexedDB + localStorage fallback
+// =====================================================================
+const DB_NAME = 'PlastoriCRM';
+const DB_VER = 1;
+let db;
+
+function openDB() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(DB_NAME, DB_VER);
+    req.onupgradeneeded = e => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('deals')) {
+        const s = d.createObjectStore('deals', { keyPath: 'id', autoIncrement: true });
+        s.createIndex('vendedor', 'Vendedor', { unique: false });
+        s.createIndex('status', 'Status', { unique: false });
+      }
+      if (!d.objectStoreNames.contains('tasks')) d.createObjectStore('tasks', { keyPath: 'id', autoIncrement: true });
+      if (!d.objectStoreNames.contains('users')) d.createObjectStore('users', { keyPath: 'username' });
+      if (!d.objectStoreNames.contains('logs')) d.createObjectStore('logs', { keyPath: 'id', autoIncrement: true });
+    };
+    req.onsuccess = e => { db = e.target.result; res(db); };
+    req.onerror = e => rej(e);
+  });
+}
+
+function dbGetAll(store) {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, 'readonly');
+    const req = tx.objectStore(store).getAll();
+    req.onsuccess = () => res(req.result);
+    req.onerror = e => rej(e);
+  });
+}
+
+function dbPut(store, obj) {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, 'readwrite');
+    const req = tx.objectStore(store).put(obj);
+    req.onsuccess = () => res(req.result);
+    req.onerror = e => rej(e);
+  });
+}
+
+function dbDelete(store, key) {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, 'readwrite');
+    const req = tx.objectStore(store).delete(key);
+    req.onsuccess = () => res();
+    req.onerror = e => rej(e);
+  });
+}
+
+// =====================================================================
+// INITIAL SEED DATA from Excel files
+// =====================================================================
+const SEED_DATA = {"nayla":[{"Status":"Aprovado","Empresa":"Balmak","DataInicial":"2025-10-27","DataFinal":"2025-11-14","Produto":"Bobina PEBD CNL lisa","QtdeKG":"100.0","ValorUnitCliente":"11.0","ValorUnitMinimo":"11.0","ValorTotal":"1100.0","Comprador":"","Telefone":"","Email":"","Cidade":"Santa Barbara d'Oeste","Estado":"SP","Vendedor":"NAYLA","NoBriefing":"NAY001","KGBriefingIdeal":"12.18","NoPedido":"","NoOP":"","Observacao":"28/10 - Ag aprovação cliente / Aprovado qtde; 27/10 - Ag revisão de briefing com Junior;"},{"Status":"Aprovado","Empresa":"Gelo Kero Mais","DataInicial":"2025-10-27","DataFinal":"","Produto":"Saco PEBD VG transp impr 4c","QtdeKG":"20.0","ValorUnitCliente":"","ValorUnitMinimo":"26.52","ValorTotal":"530.4","Comprador":"","Telefone":"","Email":"","Cidade":"","Estado":"MG","Vendedor":"NAYLA","NoBriefing":"NAY002","KGBriefingIdeal":"27.13","NoPedido":"","NoOP":"","Observacao":""},{"Status":"Aprovado","Empresa":"Gelo Kero Mais","DataInicial":"2025-10-27","DataFinal":"","Produto":"Saco PEBD VG transp impr 4c","QtdeKG":"5.5","ValorUnitCliente":"","ValorUnitMinimo":"26.34","ValorTotal":"144.87","Comprador":"","Telefone":"","Email":"","Cidade":"","Estado":"MG","Vendedor":"NAYLA","NoBriefing":"","KGBriefingIdeal":"27.84","NoPedido":"","NoOP":"","Observacao":"28/10 - Qtde autorizada, ag aprovação cliente; 27/10 - Ag retorno Junior com revisão de qtde"},{"Status":"Aprovado","Empresa":"Usina Da Mata S/A Açúcar e Álcool","DataInicial":"2025-10-27","DataFinal":"","Produto":"Saco PEBD VG transp impr 4c","QtdeKG":"205.0","ValorUnitCliente":"34.6","ValorUnitMinimo":"34.6","ValorTotal":"7093.0","Comprador":"","Telefone":"","Email":"","Cidade":"","Estado":"","Vendedor":"NAYLA","NoBriefing":"","KGBriefingIdeal":"30.39","NoPedido":"","NoOP":"","Observacao":"28/10 - Autorizado / Ag Junior com revisão de qtde; 27/10 - Ag ajuste de qtde para aprovar pedido;"},{"Status":"Aprovado","Empresa":"Dois M Têxtil","DataInicial":"2025-10-27","DataFinal":"2025-11-18","Produto":"Saco PEBD VG transp impr 3c","QtdeKG":"200.0","ValorUnitCliente":"23.6","ValorUnitMinimo":"23.6","ValorTotal":"4720.0","Comprador":"","Telefone":"","Email":"","Cidade":"","Estado":"","Vendedor":"NAYLA","NoBriefing":"","KGBriefingIdeal":"25.91","NoPedido":"","NoOP":"","Observacao":""},{"Status":"Aprovado","Empresa":"Dois M Têxtil","DataInicial":"2025-10-27","DataFinal":"2025-11-18","Produto":"Saco PEBD VG transp impr 3c","QtdeKG":"200.0","ValorUnitCliente":"23.6","ValorUnitMinimo":"23.6","ValorTotal":"4720.0","Comprador":"","Telefone":"","Email":"","Cidade":"","Estado":"","Vendedor":"NAYLA","NoBriefing":"","KGBriefingIdeal":"25.91","NoPedido":"","NoOP":"","Observacao":""},{"Status":"Aprovado","Empresa":"Fabrizio","DataInicial":"2025-10-27","DataFinal":"2025-11-05","Produto":"Saco PEBD VG transp liso","QtdeKG":"200.0","ValorUnitCliente":"20.07","ValorUnitMinimo":"20.07","ValorTotal":"4014.0","Comprador":"","Telefone":"","Email":"","Cidade":"","Estado":"","Vendedor":"NAYLA","NoBriefing":"NAY006","KGBriefingIdeal":"20.54","NoPedido":"","NoOP":"","Observacao":""},{"Status":"Aprovado","Empresa":"Fabrizio","DataInicial":"2025-10-27","DataFinal":"2025-11-05","Produto":"Saco PEBD VG transp liso","QtdeKG":"200.0","ValorUnitCliente":"20.07","ValorUnitMinimo":"20.07","ValorTotal":"4014.0","Comprador":"","Telefone":"","Email":"","Cidade":"","Estado":"","Vendedor":"NAYLA","NoBriefing":"NAY007","KGBriefingIdeal":"20.54","NoPedido":"","NoOP":"","Observacao":""},{"Status":"Aprovado","Empresa":"Fabrizio","DataInicial":"2025-10-27","DataFinal":"2025-11-05","Produto":"Saco PEBD VG transp liso","QtdeKG":"200.0","ValorUnitCliente":"20.07","ValorUnitMinimo":"20.07","ValorTotal":"4014.0","Comprador":"","Telefone":"","Email":"","Cidade":"","Estado":"","Vendedor":"NAYLA","NoBriefing":"NAY008","KGBriefingIdeal":"20.54","NoPedido":"","NoOP":"","Observacao":""},{"Status":"Aprovado","Empresa":"Sucar","DataInicial":"2025-10-27","DataFinal":"","Produto":"Saco PEBD VG transp impr 4c","QtdeKG":"100.0","ValorUnitCliente":"","ValorUnitMinimo":"27.3","ValorTotal":"2730.0","Comprador":"","Telefone":"","Email":"","Cidade":"","Estado":"","Vendedor":"NAYLA","NoBriefing":"NAY004","KGBriefingIdeal":"28.43","NoPedido":"","NoOP":"","Observacao":""},{"Status":"Aprovado","Empresa":"Sucar","DataInicial":"2025-10-27","DataFinal":"","Produto":"Saco PEBD VG transp impr 4c","QtdeKG":"100.0","ValorUnitCliente":"","ValorUnitMinimo":"27.3","ValorTotal":"2730.0","Comprador":"","Telefone":"","Email":"","Cidade":"","Estado":"","Vendedor":"NAYLA","NoBriefing":"NAY005","KGBriefingIdeal":"28.43","NoPedido":"","NoOP":"","Observacao":""},{"Status":"Aprovado","Empresa":"Exprecap","DataInicial":"2025-10-27","DataFinal":"","Produto":"Saco PEBD VG transp liso","QtdeKG":"40.0","ValorUnitCliente":"","ValorUnitMinimo":"21.2","ValorTotal":"848.0","Comprador":"","Telefone":"","Email":"","Cidade":"","Estado":"","Vendedor":"NAYLA","NoBriefing":"NAY003","KGBriefingIdeal":"22.05","NoPedido":"","NoOP":"","Observacao":""},{"Status":"Aprovado","Empresa":"Alphaville Saúde","DataInicial":"2025-10-28","DataFinal":"","Produto":"Saco PEBD VG transp impr 1c","QtdeKG":"40.0","ValorUnitCliente":"","ValorUnitMinimo":"26.31","ValorTotal":"1052.4","Comprador":"","Telefone":"","Email":"","Cidade":"","Estado":"","Vendedor":"NAYLA","NoBriefing":"NAY010","KGBriefingIdeal":"28.95","NoPedido":"","NoOP":"","Observacao":"29/10 - Ag revisão de briefing com Junior"},{"Status":"Aprovado","Empresa":"Alphaville Saúde","DataInicial":"2025-10-28","DataFinal":"","Produto":"Saco PEBD VG transp impr 1c","QtdeKG":"40.0","ValorUnitCliente":"","ValorUnitMinimo":"26.31","ValorTotal":"1052.4","Comprador":"","Telefone":"","Email":"","Cidade":"","Estado":"","Vendedor":"NAYLA","NoBriefing":"NAY009","KGBriefingIdeal":"28.95","NoPedido":"","NoOP":"","Observacao":"29/10 - Ag revisão de briefing com Junior"}]};
+
+// =====================================================================
+// USERS CONFIG
+// =====================================================================
+const DEFAULT_USERS = {
+  'nayla':       { name: 'Nayla',       role: 'seller', vendor: 'NAYLA',   tempPass: 'plastori2025' },
+  'natalia':     { name: 'Natalia',     role: 'seller', vendor: 'Natalia', tempPass: 'plastori2025' },
+  'marcelo':     { name: 'Marcelo',     role: 'seller', vendor: 'MARCELO', tempPass: 'plastori2025' },
+  'adelita':     { name: 'Adelita',     role: 'seller', vendor: 'ADELITA', tempPass: 'plastori2025' },
+  'admin':       { name: 'Administrador', role: 'admin', vendor: null,    tempPass: 'admin2025' },
+  'consultoria': { name: 'Consultoria',   role: 'admin', vendor: null,    tempPass: 'consult2025' },
+};
+
+// Simple hash (not cryptographic — for local/offline use)
+function simpleHash(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const c = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + c;
+    hash |= 0;
+  }
+  return hash.toString(16);
+}
+
+// =====================================================================
+// APP STATE
+// =====================================================================
+let currentUser = null;
+let currentPage = 'dashboard';
+let allDeals = [];
+let allTasks = [];
+let editDealId = null;
+let dealPage = 1;
+const DEALS_PER_PAGE = 20;
+
+// =====================================================================
+// BOOT
+// =====================================================================
+async function boot() {
+  await openDB();
+  // Seed users if first time
+  const users = await dbGetAll('users');
+  if (users.length === 0) {
+    for (const [u, cfg] of Object.entries(DEFAULT_USERS)) {
+      await dbPut('users', { username: u, ...cfg, passHash: simpleHash(cfg.tempPass), firstLogin: true });
+    }
+  }
+  // Seed deals from Excel data if empty
+  const deals = await dbGetAll('deals');
+  if (deals.length === 0) {
+    // Load all vendor seed data
+    const allVendors = ['nayla','natalia','marcelo','adelita'];
+    for (const v of allVendors) {
+      const vData = await loadVendorSeed(v);
+      for (const d of vData) {
+        await dbPut('deals', { ...d, _seeded: true });
+      }
+    }
+    toast('Dados importados dos arquivos Excel ✓', 'success');
+  }
+  // Check session
+  const sess = sessionStorage.getItem('plastoriUser');
+  if (sess) {
+    currentUser = JSON.parse(sess);
+    showApp();
+  }
+}
+
+// Vendor seed data embedded
+async function loadVendorSeed(vendor) {
+  // Inline minimal seed — full data is in SEED_DATA for nayla, others use simplified
+  const maps = {
+    nayla: SEED_DATA.nayla || [],
+    natalia: NATALIA_DATA || [],
+    marcelo: MARCELO_DATA || [],
+    adelita: ADELITA_DATA || [],
+  };
+  return maps[vendor] || [];
+}
+
+// =====================================================================
+// AUTH
+// =====================================================================
+async function doLogin() {
+  const u = document.getElementById('loginUser').value.trim().toLowerCase();
+  const p = document.getElementById('loginPass').value;
+  const errEl = document.getElementById('loginError');
+  if (!u || !p) { errEl.textContent = 'Preencha usuário e senha.'; return; }
+  
+  const tx = db.transaction('users', 'readonly');
+  const req = tx.objectStore('users').get(u);
+  req.onsuccess = async () => {
+    const user = req.result;
+    if (!user) { errEl.textContent = 'Usuário não encontrado.'; return; }
+    if (simpleHash(p) !== user.passHash) { errEl.textContent = 'Senha incorreta.'; return; }
+    
+    currentUser = user;
+    sessionStorage.setItem('plastoriUser', JSON.stringify(user));
+    addLog(`Login: ${user.name}`);
+    errEl.textContent = '';
+    
+    if (user.firstLogin) {
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('setPasswordScreen').classList.add('open');
+    } else {
+      showApp();
+    }
+  };
+}
+
+async function setNewPassword() {
+  const p1 = document.getElementById('newPass1').value;
+  const p2 = document.getElementById('newPass2').value;
+  const errEl = document.getElementById('setPassError');
+  if (p1.length < 6) { errEl.textContent = 'Senha deve ter ao menos 6 caracteres.'; return; }
+  if (p1 !== p2) { errEl.textContent = 'As senhas não coincidem.'; return; }
+  
+  const updated = { ...currentUser, passHash: simpleHash(p1), firstLogin: false };
+  await dbPut('users', updated);
+  currentUser = updated;
+  sessionStorage.setItem('plastoriUser', JSON.stringify(updated));
+  document.getElementById('setPasswordScreen').classList.remove('open');
+  toast('Senha definida com sucesso!', 'success');
+  showApp();
+}
+
+function doLogout() {
+  sessionStorage.removeItem('plastoriUser');
+  currentUser = null;
+  document.getElementById('appShell').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('loginUser').value = '';
+  document.getElementById('loginPass').value = '';
+}
+
+// =====================================================================
+// APP SHOW
+// =====================================================================
+function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appShell').style.display = 'flex';
+  // Update UI for user
+  document.getElementById('userAvatar').textContent = currentUser.name.charAt(0).toUpperCase();
+  document.getElementById('userDisplayName').textContent = currentUser.name;
+  document.getElementById('userRoleLabel').textContent = currentUser.role === 'admin' ? 'Administrador' : 'Vendedor';
+  // Show admin menu
+  document.querySelectorAll('.admin-only').forEach(el => {
+    el.style.display = currentUser.role === 'admin' ? 'flex' : 'none';
+  });
+  navigate('dashboard');
+}
+
+// =====================================================================
+// NAVIGATION
+// =====================================================================
+function navigate(page) {
+  currentPage = page;
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  const btn = document.querySelector(`.nav-item[onclick*="${page}"]`);
+  if (btn) btn.classList.add('active');
+  const titles = {
+    dashboard: 'Dashboard', funil: 'Funil de Vendas', negocios: 'Negócios',
+    clientes: 'Clientes', tarefas: 'Tarefas', relatorios: 'Relatórios', admin: 'Administração'
+  };
+  document.getElementById('pageTitle').textContent = titles[page] || page;
+  const pages = { dashboard: renderDashboard, funil: renderFunil, negocios: renderNegocios, clientes: renderClientes, tarefas: renderTarefas, relatorios: renderRelatorios, admin: renderAdmin };
+  if (pages[page]) pages[page]();
+}
+
+// =====================================================================
+// DATA HELPERS
+// =====================================================================
+async function getDeals() {
+  const all = await dbGetAll('deals');
+  if (currentUser.role === 'admin') return all;
+  // Sellers see only their own
+  const vendorNames = getVendorAliases(currentUser.vendor);
+  return all.filter(d => vendorNames.includes((d.Vendedor||'').toUpperCase()));
+}
+
+function getVendorAliases(vendor) {
+  if (!vendor) return [];
+  const v = vendor.toUpperCase();
+  // Map display names to all possible aliases in data
+  const aliases = {
+    'NAYLA': ['NAYLA'],
+    'NATALIA': ['NATALIA', 'NATÁLIA'],
+    'MARCELO': ['MARCELO'],
+    'ADELITA': ['ADELITA'],
+  };
+  return aliases[v] || [v];
+}
+
+function fmtMoney(v) {
+  const n = parseFloat(v);
+  if (isNaN(n)) return 'R$ –';
+  return 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtNum(v) {
+  const n = parseFloat(v);
+  if (isNaN(n) || !v) return '–';
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function statusBadge(s) {
+  const m = {
+    'aprovado': ['badge-green', '✓ Aprovado'],
+    'prospecção': ['badge-blue', '🔍 Prospecção'],
+    'orçamento': ['badge-yellow', '📄 Orçamento'],
+    'perdido preço': ['badge-red', '✗ Preço'],
+    'perdido qtde': ['badge-red', '✗ Qtde'],
+    'reprovado finan': ['badge-purple', '✗ Financeiro'],
+    'amostra': ['badge-orange', '🧪 Amostra'],
+  };
+  const key = (s||'').toLowerCase().trim();
+  const [cls, label] = m[key] || ['badge-gray', s];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+async function addLog(msg) {
+  await dbPut('logs', { id: Date.now(), msg, user: currentUser?.name, ts: new Date().toISOString() });
+}
+
+// =====================================================================
+// DASHBOARD
+// =====================================================================
+async function renderDashboard() {
+  const deals = await getDeals();
+  const approved = deals.filter(d => (d.Status||'').toLowerCase() === 'aprovado');
+  const lost = deals.filter(d => (d.Status||'').toLowerCase().startsWith('perdido') || (d.Status||'').toLowerCase() === 'reprovado finan');
+  const prospect = deals.filter(d => (d.Status||'').toLowerCase() === 'prospecção');
+  const totalRev = approved.reduce((s,d) => s + (parseFloat(d.ValorTotal)||0), 0);
+  const totalKg = approved.reduce((s,d) => s + (parseFloat(d.QtdeKG)||0), 0);
+  const conversion = deals.length > 0 ? (approved.length / deals.length * 100).toFixed(1) : 0;
+  const ticket = approved.length > 0 ? totalRev / approved.length : 0;
+
+  // Build status breakdown for chart
+  const statusCount = {};
+  deals.forEach(d => {
+    const s = (d.Status||'Outros').toLowerCase().trim();
+    statusCount[s] = (statusCount[s] || 0) + 1;
+  });
+
+  // Monthly approved revenue
+  const monthlyData = {};
+  approved.forEach(d => {
+    const dt = d.DataInicial;
+    if (dt && dt.length >= 7) {
+      const key = dt.substring(0, 7);
+      monthlyData[key] = (monthlyData[key] || 0) + (parseFloat(d.ValorTotal)||0);
+    }
+  });
+  const months = Object.keys(monthlyData).sort();
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="section-title">Dashboard ${currentUser.role !== 'admin' ? '— '+currentUser.name : 'Geral'}</div>
+    <div class="section-sub">Visão geral do desempenho comercial</div>
+
+    <div class="stats-grid">
+      <div class="stat-card" style="--accent:var(--green)">
+        <div class="stat-label">Aprovados</div>
+        <div class="stat-value">${approved.length}</div>
+        <div class="stat-sub">${fmtMoney(totalRev)} em faturamento</div>
+        <div class="stat-icon">✅</div>
+      </div>
+      <div class="stat-card" style="--accent:var(--blue)">
+        <div class="stat-label">Prospecções</div>
+        <div class="stat-value">${prospect.length}</div>
+        <div class="stat-sub">Em andamento</div>
+        <div class="stat-icon">🔍</div>
+      </div>
+      <div class="stat-card" style="--accent:var(--red)">
+        <div class="stat-label">Perdidos</div>
+        <div class="stat-value">${lost.length}</div>
+        <div class="stat-sub">${deals.length} negócios totais</div>
+        <div class="stat-icon">📉</div>
+      </div>
+      <div class="stat-card" style="--accent:var(--brand-gold)">
+        <div class="stat-label">Conversão</div>
+        <div class="stat-value">${conversion}%</div>
+        <div class="stat-sub">Taxa de fechamento</div>
+        <div class="stat-icon">🎯</div>
+      </div>
+      <div class="stat-card" style="--accent:var(--brand-primary)">
+        <div class="stat-label">Faturamento Total</div>
+        <div class="stat-value" style="font-size:20px">${fmtMoney(totalRev)}</div>
+        <div class="stat-sub">Negócios aprovados</div>
+        <div class="stat-icon">💰</div>
+      </div>
+      <div class="stat-card" style="--accent:var(--purple)">
+        <div class="stat-label">KG Aprovados</div>
+        <div class="stat-value">${fmtNum(totalKg)}</div>
+        <div class="stat-sub">Total em quilos</div>
+        <div class="stat-icon">⚖️</div>
+      </div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-title">Status dos Negócios</div>
+        <div class="chart-wrap"><canvas id="chartStatus"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Faturamento Mensal (Aprovados)</div>
+        <div class="chart-wrap"><canvas id="chartMonthly"></canvas></div>
+      </div>
+    </div>
+
+    ${currentUser.role === 'admin' ? await renderVendorRanking(deals) : ''}
+  `;
+
+  // Status chart
+  const sLabels = Object.keys(statusCount).map(k => k.charAt(0).toUpperCase() + k.slice(1));
+  const sVals = Object.values(statusCount);
+  new Chart(document.getElementById('chartStatus'), {
+    type: 'doughnut',
+    data: {
+      labels: sLabels,
+      datasets: [{ data: sVals, backgroundColor: ['#22c55e','#3b82f6','#f59e0b','#ef4444','#ef4444','#8b5cf6','#E8621A'], borderWidth: 0 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#f0ede8', font: { family: 'DM Sans', size: 11 } } } } }
+  });
+
+  // Monthly chart
+  new Chart(document.getElementById('chartMonthly'), {
+    type: 'bar',
+    data: {
+      labels: months.map(m => { const [y,mo] = m.split('-'); return `${mo}/${y.slice(2)}`; }),
+      datasets: [{ label: 'Faturamento (R$)', data: months.map(m => monthlyData[m]), backgroundColor: 'rgba(232,98,26,0.7)', borderRadius: 6 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { ticks: { color: '#8b8b9e', callback: v => 'R$'+v.toLocaleString('pt-BR') }, grid: { color: 'rgba(255,255,255,0.05)' } }, x: { ticks: { color: '#8b8b9e' }, grid: { display: false } } }
+    }
+  });
+}
+
+async function renderVendorRanking(deals) {
+  const vendors = {};
+  deals.forEach(d => {
+    const v = (d.Vendedor||'').toUpperCase();
+    if (!v) return;
+    if (!vendors[v]) vendors[v] = { name: v, total: 0, count: 0, approved: 0 };
+    if ((d.Status||'').toLowerCase() === 'aprovado') {
+      vendors[v].total += parseFloat(d.ValorTotal)||0;
+      vendors[v].approved++;
+    }
+    vendors[v].count++;
+  });
+  const sorted = Object.values(vendors).sort((a,b) => b.total - a.total);
+  const max = sorted[0]?.total || 1;
+  return `
+    <div class="chart-card" style="margin-top:0">
+      <div class="chart-title">Ranking de Vendedores</div>
+      ${sorted.map((v,i) => `
+        <div class="ranking-item">
+          <div class="rank-num">#${i+1}</div>
+          <div class="rank-info">
+            <div class="rank-name">${v.name}</div>
+            <div class="rank-sub">${v.approved} aprovados / ${v.count} negócios</div>
+            <div class="progress-bar"><div class="progress-fill" style="width:${(v.total/max*100).toFixed(1)}%"></div></div>
+          </div>
+          <div class="rank-value">${fmtMoney(v.total)}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+// =====================================================================
+// FUNIL
+// =====================================================================
+async function renderFunil() {
+  const deals = await getDeals();
+  const columns = [
+    { key: 'prospecção', label: 'Prospecção', color: '#3b82f6' },
+    { key: 'orçamento', label: 'Orçamento', color: '#f59e0b' },
+    { key: 'amostra', label: 'Amostra', color: '#E8621A' },
+    { key: 'aprovado', label: 'Aprovado', color: '#22c55e' },
+    { key: 'perdido', label: 'Perdido', color: '#ef4444' },
+  ];
+
+  function colDeals(key) {
+    if (key === 'perdido') return deals.filter(d => (d.Status||'').toLowerCase().startsWith('perdido') || (d.Status||'').toLowerCase() === 'reprovado finan');
+    return deals.filter(d => (d.Status||'').toLowerCase().trim() === key);
+  }
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="section-title">Funil de Vendas</div>
+    <div class="section-sub">Visão Kanban por estágio do negócio</div>
+    <div class="funnel-grid">
+      ${columns.map(col => {
+        const items = colDeals(col.key);
+        const total = items.reduce((s,d) => s + (parseFloat(d.ValorTotal)||0), 0);
+        return `
+          <div class="funnel-col">
+            <div class="funnel-head" style="background:${col.color}22;color:${col.color}">
+              <span>${col.label}</span>
+              <span class="funnel-count">${items.length}</span>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);padding:4px 14px 6px;border-bottom:1px solid var(--border)">${fmtMoney(total)}</div>
+            <div class="funnel-body">
+              ${items.length === 0 ? '<div style="font-size:12px;color:var(--text-dim);padding:12px;text-align:center">Nenhum</div>' :
+                items.slice(0,30).map(d => `
+                  <div class="funnel-card" onclick="openEditDeal(${d.id})">
+                    <div class="funnel-card-company">${d.Empresa||'–'}</div>
+                    <div class="funnel-card-product">${d.Produto||''}</div>
+                    ${d.ValorTotal ? `<div class="funnel-card-value">${fmtMoney(d.ValorTotal)}</div>` : ''}
+                  </div>
+                `).join('')
+              }
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+// =====================================================================
+// NEGÓCIOS (full table)
+// =====================================================================
+let filterStatus = '', filterSearch = '';
+
+async function renderNegocios() {
+  const deals = await getDeals();
+  allDeals = deals;
+  renderNegociosTable();
+}
+
+function renderNegociosTable() {
+  let filtered = allDeals;
+  if (filterStatus) filtered = filtered.filter(d => (d.Status||'').toLowerCase().includes(filterStatus.toLowerCase()));
+  if (filterSearch) {
+    const q = filterSearch.toLowerCase();
+    filtered = filtered.filter(d =>
+      (d.Empresa||'').toLowerCase().includes(q) ||
+      (d.Produto||'').toLowerCase().includes(q) ||
+      (d.NoBriefing||'').toLowerCase().includes(q) ||
+      (d.Comprador||'').toLowerCase().includes(q)
+    );
+  }
+  const total = filtered.length;
+  const pages = Math.ceil(total / DEALS_PER_PAGE);
+  if (dealPage > pages) dealPage = 1;
+  const start = (dealPage - 1) * DEALS_PER_PAGE;
+  const pageData = filtered.slice(start, start + DEALS_PER_PAGE);
+  const totalRev = filtered.filter(d => (d.Status||'').toLowerCase() === 'aprovado').reduce((s,d) => s + (parseFloat(d.ValorTotal)||0), 0);
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="section-title">Negócios</div>
+    <div class="section-sub">${total} registros encontrados — Faturamento aprovado: ${fmtMoney(totalRev)}</div>
+    
+    <div class="filters-bar">
+      <select class="filter-select" onchange="filterStatus=this.value;dealPage=1;renderNegociosTable()">
+        <option value="">Todos os Status</option>
+        <option value="aprovado">Aprovado</option>
+        <option value="prospecção">Prospecção</option>
+        <option value="orçamento">Orçamento</option>
+        <option value="perdido">Perdido</option>
+        <option value="amostra">Amostra</option>
+        <option value="reprovado">Reprovado</option>
+      </select>
+      <input type="text" class="filter-input" placeholder="🔍 Buscar empresa, produto..." value="${filterSearch}"
+        oninput="filterSearch=this.value;dealPage=1;renderNegociosTable()" style="width:260px">
+      <button class="btn btn-brand btn-sm" onclick="openAddDeal()">+ Novo Negócio</button>
+      <button class="btn btn-ghost btn-sm" onclick="exportDealsExcel()">📥 Exportar Excel</button>
+    </div>
+
+    <div class="table-card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Status</th><th>Empresa</th><th>Produto</th><th>Qtde (KG)</th>
+              <th>Valor Total</th><th>Data Inicial</th><th>Vendedor</th><th>Briefing</th><th>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${pageData.length === 0 ? `<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:24px">Nenhum negócio encontrado</td></tr>` :
+              pageData.map(d => `
+                <tr>
+                  <td>${statusBadge(d.Status)}</td>
+                  <td title="${d.Empresa||''}">${d.Empresa||'–'}</td>
+                  <td title="${d.Produto||''}">${(d.Produto||'').substring(0,30)}</td>
+                  <td>${fmtNum(d.QtdeKG)}</td>
+                  <td style="color:var(--green);font-weight:600">${fmtMoney(d.ValorTotal)}</td>
+                  <td style="font-family:'DM Mono',monospace;font-size:12px">${d.DataInicial||'–'}</td>
+                  <td>${d.Vendedor||'–'}</td>
+                  <td style="font-family:'DM Mono',monospace;font-size:12px">${d.NoBriefing||'–'}</td>
+                  <td>
+                    <button class="btn btn-ghost btn-sm" onclick="openEditDeal(${d.id})">✏️</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteDeal(${d.id})">🗑</button>
+                  </td>
+                </tr>
+              `).join('')
+            }
+          </tbody>
+        </table>
+      </div>
+      <div class="table-pagination">
+        <span>Mostrando ${start+1}–${Math.min(start+DEALS_PER_PAGE,total)} de ${total}</span>
+        <div class="pagination-btns">
+          <button class="pg-btn" onclick="dealPage=Math.max(1,dealPage-1);renderNegociosTable()" ${dealPage===1?'disabled':''}>‹</button>
+          ${Array.from({length:Math.min(pages,7)},(_,i)=>`<button class="pg-btn ${dealPage===i+1?'active':''}" onclick="dealPage=${i+1};renderNegociosTable()">${i+1}</button>`).join('')}
+          <button class="pg-btn" onclick="dealPage=Math.min(${pages},dealPage+1);renderNegociosTable()" ${dealPage===pages?'disabled':''}>›</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// =====================================================================
+// CLIENTES
+// =====================================================================
+async function renderClientes() {
+  const deals = await getDeals();
+  // Group by company
+  const companies = {};
+  deals.forEach(d => {
+    const c = d.Empresa || 'Sem nome';
+    if (!companies[c]) companies[c] = { name: c, deals: [], totalRev: 0, cidade: d.Cidade, estado: d.Estado, comprador: d.Comprador, telefone: d.Telefone, email: d.Email };
+    companies[c].deals.push(d);
+    if ((d.Status||'').toLowerCase() === 'aprovado') companies[c].totalRev += parseFloat(d.ValorTotal)||0;
+  });
+  const sorted = Object.values(companies).sort((a,b) => b.totalRev - a.totalRev);
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="section-title">Clientes</div>
+    <div class="section-sub">${sorted.length} empresas cadastradas</div>
+    <div class="filters-bar">
+      <input type="text" class="filter-input" id="clientSearch" placeholder="🔍 Buscar empresa..." oninput="filterClientes(this.value)" style="width:280px">
+    </div>
+    <div id="clientTable"></div>
+  `;
+  renderClientTable(sorted);
+}
+
+function filterClientes(q) {
+  const rows = document.querySelectorAll('#clientTable tbody tr');
+  rows.forEach(r => {
+    r.style.display = r.textContent.toLowerCase().includes(q.toLowerCase()) ? '' : 'none';
+  });
+}
+
+function renderClientTable(companies) {
+  document.getElementById('clientTable').innerHTML = `
+    <div class="table-card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Empresa</th><th>Negócios</th><th>Faturamento</th><th>Cidade/Estado</th><th>Comprador</th><th>Contato</th></tr>
+          </thead>
+          <tbody>
+            ${companies.map(c => `
+              <tr>
+                <td style="font-weight:600">${c.name}</td>
+                <td>${c.deals.length}</td>
+                <td style="color:var(--green);font-weight:600">${fmtMoney(c.totalRev)}</td>
+                <td>${[c.cidade,c.estado].filter(Boolean).join(' – ') || '–'}</td>
+                <td>${c.comprador||'–'}</td>
+                <td style="font-size:12px">${c.telefone||''} ${c.email ? `<br><span style="color:var(--brand-primary)">${c.email}</span>` : ''}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// =====================================================================
+// TAREFAS
+// =====================================================================
+async function renderTarefas() {
+  allTasks = await dbGetAll('tasks');
+  const myTasks = allTasks.filter(t => !t.userId || t.userId === currentUser.username);
+  const open = myTasks.filter(t => !t.done);
+  const done = myTasks.filter(t => t.done);
+
+  const pri = { urgente: 'badge-red', alta: 'badge-yellow', normal: 'badge-gray' };
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="section-title">Tarefas & Follow-up</div>
+    <div class="section-sub">${open.length} pendentes · ${done.length} concluídas</div>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="btn btn-brand" onclick="document.getElementById('taskModal').classList.add('open')">+ Nova Tarefa</button>
+    </div>
+    <div class="tabs" id="taskTabs">
+      <button class="tab active" onclick="switchTaskTab('open',this)">Pendentes (${open.length})</button>
+      <button class="tab" onclick="switchTaskTab('done',this)">Concluídas (${done.length})</button>
+    </div>
+    <div id="taskListOpen">
+      ${open.length === 0 ? `<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-text">Nenhuma tarefa pendente!</div></div>` :
+        open.map(t => `
+          <div class="task-item" id="task-${t.id}">
+            <div class="task-check" onclick="toggleTask(${t.id})">&#10003;</div>
+            <div class="task-info">
+              <div class="task-title">${t.title}</div>
+              <div class="task-meta">${t.client||''}</div>
+            </div>
+            <span class="badge ${pri[t.priority]||'badge-gray'}">${t.priority||'normal'}</span>
+            <div class="task-date">${t.date||''}</div>
+            <button class="btn btn-danger btn-sm" onclick="deleteTask(${t.id})">✕</button>
+          </div>
+        `).join('')
+      }
+    </div>
+    <div id="taskListDone" style="display:none">
+      ${done.length === 0 ? `<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">Nenhuma tarefa concluída ainda.</div></div>` :
+        done.map(t => `
+          <div class="task-item" style="opacity:0.5">
+            <div class="task-check done" onclick="toggleTask(${t.id})">&#10003;</div>
+            <div class="task-info">
+              <div class="task-title" style="text-decoration:line-through">${t.title}</div>
+              <div class="task-meta">${t.client||''}</div>
+            </div>
+            <div class="task-date">${t.date||''}</div>
+            <button class="btn btn-danger btn-sm" onclick="deleteTask(${t.id})">✕</button>
+          </div>
+        `).join('')
+      }
+    </div>
+  `;
+}
+
+function switchTaskTab(type, el) {
+  document.querySelectorAll('#taskTabs .tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('taskListOpen').style.display = type === 'open' ? '' : 'none';
+  document.getElementById('taskListDone').style.display = type === 'done' ? '' : 'none';
+}
+
+async function saveTask() {
+  const title = document.getElementById('tTitle').value.trim();
+  if (!title) { toast('Título é obrigatório', 'error'); return; }
+  await dbPut('tasks', {
+    title,
+    client: document.getElementById('tClient').value,
+    date: document.getElementById('tDate').value,
+    priority: document.getElementById('tPriority').value,
+    done: false,
+    userId: currentUser.username,
+    created: new Date().toISOString()
+  });
+  document.getElementById('taskModal').classList.remove('open');
+  document.getElementById('tTitle').value = '';
+  document.getElementById('tClient').value = '';
+  toast('Tarefa criada!', 'success');
+  renderTarefas();
+}
+
+async function toggleTask(id) {
+  const tasks = await dbGetAll('tasks');
+  const t = tasks.find(t => t.id === id);
+  if (t) { await dbPut('tasks', { ...t, done: !t.done }); renderTarefas(); }
+}
+
+async function deleteTask(id) {
+  await dbDelete('tasks', id);
+  toast('Tarefa removida', 'success');
+  renderTarefas();
+}
+
+// =====================================================================
+// RELATÓRIOS
+// =====================================================================
+async function renderRelatorios() {
+  const deals = await getDeals();
+  const approved = deals.filter(d => (d.Status||'').toLowerCase() === 'aprovado');
+  const lost = deals.filter(d => (d.Status||'').toLowerCase().startsWith('perdido') || (d.Status||'').toLowerCase() === 'reprovado finan');
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="section-title">Relatórios</div>
+    <div class="section-sub">Análises e exportações</div>
+
+    <div class="admin-grid">
+      <div class="admin-card">
+        <h3>📊 Resumo Executivo</h3>
+        <div style="font-size:13px;line-height:1.8;color:var(--text-muted)">
+          <div>Total de negócios: <strong style="color:var(--text)">${deals.length}</strong></div>
+          <div>Aprovados: <strong style="color:var(--green)">${approved.length}</strong></div>
+          <div>Perdidos: <strong style="color:var(--red)">${lost.length}</strong></div>
+          <div>Taxa de conversão: <strong style="color:var(--text)">${deals.length ? (approved.length/deals.length*100).toFixed(1) : 0}%</strong></div>
+          <div>Faturamento total: <strong style="color:var(--green)">${fmtMoney(approved.reduce((s,d) => s+(parseFloat(d.ValorTotal)||0),0))}</strong></div>
+          <div>KG total aprovado: <strong style="color:var(--text)">${fmtNum(approved.reduce((s,d) => s+(parseFloat(d.QtdeKG)||0),0))}</strong></div>
+        </div>
+      </div>
+
+      <div class="admin-card">
+        <h3>📥 Exportar Dados</h3>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button class="btn btn-brand" onclick="exportDealsExcel()">📊 Exportar Negócios (Excel)</button>
+          <button class="btn btn-ghost" onclick="exportDealsCSV()">📄 Exportar Negócios (CSV)</button>
+          <button class="btn btn-ghost" onclick="exportBackupJSON()">💾 Backup Completo (JSON)</button>
+        </div>
+      </div>
+
+      <div class="admin-card" style="grid-column:1/-1">
+        <h3>📈 Top 10 Clientes por Faturamento</h3>
+        ${await renderTopClients(approved)}
+      </div>
+    </div>
+  `;
+}
+
+async function renderTopClients(approved) {
+  const map = {};
+  approved.forEach(d => {
+    const c = d.Empresa||'–';
+    map[c] = (map[c]||0) + (parseFloat(d.ValorTotal)||0);
+  });
+  const top = Object.entries(map).sort((a,b) => b[1]-a[1]).slice(0,10);
+  const max = top[0]?.[1] || 1;
+  return top.map(([name, val],i) => `
+    <div class="ranking-item">
+      <div class="rank-num">#${i+1}</div>
+      <div class="rank-info">
+        <div class="rank-name">${name}</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${(val/max*100).toFixed(1)}%"></div></div>
+      </div>
+      <div class="rank-value">${fmtMoney(val)}</div>
+    </div>
+  `).join('');
+}
+
+// =====================================================================
+// ADMIN
+// =====================================================================
+async function renderAdmin() {
+  if (currentUser.role !== 'admin') { toast('Acesso negado', 'error'); navigate('dashboard'); return; }
+  const users = await dbGetAll('users');
+  const logs = await dbGetAll('logs');
+  const recent = logs.sort((a,b) => b.id-a.id).slice(0,20);
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="section-title">Administração</div>
+    <div class="section-sub">Gestão de usuários, backups e logs</div>
+
+    <div class="admin-grid">
+      <div class="admin-card">
+        <h3>👥 Usuários</h3>
+        ${users.map(u => `
+          <div class="user-list-item">
+            <div class="user-avatar" style="width:28px;height:28px;font-size:11px">${u.name.charAt(0)}</div>
+            <div style="flex:1">
+              <div class="user-list-name">${u.name} <code style="font-size:10px;color:var(--text-dim)">(${u.username})</code></div>
+              <div class="user-list-role">${u.role === 'admin' ? '👑 Admin' : '👤 Vendedor'}</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="resetUserPass('${u.username}')">🔑</button>
+          </div>
+        `).join('')}
+      </div>
+
+      <div class="admin-card">
+        <h3>💾 Backup & Restauração</h3>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button class="btn btn-brand" onclick="exportBackupJSON()">📦 Backup Completo</button>
+          <button class="btn btn-ghost" onclick="document.getElementById('restoreFile').click()">♻️ Restaurar Backup</button>
+          <input type="file" id="restoreFile" accept=".json" style="display:none" onchange="restoreBackup(this)">
+          <button class="btn btn-ghost" onclick="importExcelFile()">📂 Importar Excel</button>
+          <input type="file" id="importFile" accept=".xlsx,.xls" style="display:none" onchange="handleImportExcel(this)">
+        </div>
+      </div>
+
+      <div class="admin-card" style="grid-column:1/-1">
+        <h3>📋 Log de Atividades (últimas 20)</h3>
+        ${recent.length === 0 ? '<div style="color:var(--text-dim);font-size:13px">Nenhum log encontrado.</div>' :
+          recent.map(l => `
+            <div class="log-item">
+              <div>${l.msg}</div>
+              <div class="log-time">${l.user||''} · ${l.ts ? new Date(l.ts).toLocaleString('pt-BR') : ''}</div>
+            </div>
+          `).join('')
+        }
+      </div>
+    </div>
+  `;
+}
+
+async function resetUserPass(username) {
+  const newPass = 'plastori2025';
+  const users = await dbGetAll('users');
+  const user = users.find(u => u.username === username);
+  if (!user) return;
+  await dbPut('users', { ...user, passHash: simpleHash(newPass), firstLogin: true });
+  addLog(`Senha resetada: ${username}`);
+  toast(`Senha de ${username} resetada para: ${newPass}`, 'success');
+}
+
+// =====================================================================
+// DEAL MODAL
+// =====================================================================
+function openAddDeal() {
+  editDealId = null;
+  document.getElementById('dealModalTitle').textContent = 'Novo Negócio';
+  ['fStatus','fEmpresa','fDataInicial','fDataFinal','fProduto','fQtde','fValorCliente','fValorMin','fValorTotal','fKGIdeal','fComprador','fTelefone','fEmail','fCidade','fEstado','fBriefing','fPedido','fOP','fObs'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = id === 'fStatus' ? 'Prospecção' : '';
+  });
+  document.getElementById('dealModal').classList.add('open');
+}
+
+async function openEditDeal(id) {
+  const deals = await dbGetAll('deals');
+  const d = deals.find(d => d.id === id);
+  if (!d) return;
+  editDealId = id;
+  document.getElementById('dealModalTitle').textContent = 'Editar Negócio';
+  document.getElementById('fStatus').value = d.Status || 'Prospecção';
+  document.getElementById('fEmpresa').value = d.Empresa || '';
+  document.getElementById('fDataInicial').value = d.DataInicial || '';
+  document.getElementById('fDataFinal').value = d.DataFinal || '';
+  document.getElementById('fProduto').value = d.Produto || '';
+  document.getElementById('fQtde').value = d.QtdeKG || '';
+  document.getElementById('fValorCliente').value = d.ValorUnitCliente || '';
+  document.getElementById('fValorMin').value = d.ValorUnitMinimo || '';
+  document.getElementById('fValorTotal').value = d.ValorTotal || '';
+  document.getElementById('fKGIdeal').value = d.KGBriefingIdeal || '';
+  document.getElementById('fComprador').value = d.Comprador || '';
+  document.getElementById('fTelefone').value = d.Telefone || '';
+  document.getElementById('fEmail').value = d.Email || '';
+  document.getElementById('fCidade').value = d.Cidade || '';
+  document.getElementById('fEstado').value = d.Estado || '';
+  document.getElementById('fBriefing').value = d.NoBriefing || '';
+  document.getElementById('fPedido').value = d.NoPedido || '';
+  document.getElementById('fOP').value = d.NoOP || '';
+  document.getElementById('fObs').value = d.Observacao || '';
+  document.getElementById('dealModal').classList.add('open');
+}
+
+function closeDealModal() {
+  document.getElementById('dealModal').classList.remove('open');
+}
+
+async function saveDeal() {
+  const empresa = document.getElementById('fEmpresa').value.trim();
+  if (!empresa) { toast('Empresa é obrigatória', 'error'); return; }
+
+  const deal = {
+    Status: document.getElementById('fStatus').value,
+    Empresa: empresa,
+    DataInicial: document.getElementById('fDataInicial').value,
+    DataFinal: document.getElementById('fDataFinal').value,
+    Produto: document.getElementById('fProduto').value,
+    QtdeKG: document.getElementById('fQtde').value,
+    ValorUnitCliente: document.getElementById('fValorCliente').value,
+    ValorUnitMinimo: document.getElementById('fValorMin').value,
+    ValorTotal: document.getElementById('fValorTotal').value,
+    KGBriefingIdeal: document.getElementById('fKGIdeal').value,
+    Comprador: document.getElementById('fComprador').value,
+    Telefone: document.getElementById('fTelefone').value,
+    Email: document.getElementById('fEmail').value,
+    Cidade: document.getElementById('fCidade').value,
+    Estado: document.getElementById('fEstado').value,
+    NoBriefing: document.getElementById('fBriefing').value,
+    NoPedido: document.getElementById('fPedido').value,
+    NoOP: document.getElementById('fOP').value,
+    Observacao: document.getElementById('fObs').value,
+    Vendedor: editDealId ? undefined : currentUser.vendor || currentUser.name.toUpperCase(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (editDealId) {
+    const all = await dbGetAll('deals');
+    const existing = all.find(d => d.id === editDealId);
+    await dbPut('deals', { ...existing, ...deal });
+    addLog(`Negócio editado: ${empresa}`);
+    toast('Negócio atualizado!', 'success');
+  } else {
+    deal.createdAt = new Date().toISOString();
+    await dbPut('deals', deal);
+    addLog(`Negócio criado: ${empresa}`);
+    toast('Negócio criado!', 'success');
+  }
+  closeDealModal();
+  if (currentPage === 'negocios') renderNegocios();
+  else if (currentPage === 'funil') renderFunil();
+  else if (currentPage === 'dashboard') renderDashboard();
+}
+
+async function deleteDeal(id) {
+  if (!confirm('Remover este negócio?')) return;
+  await dbDelete('deals', id);
+  addLog(`Negócio removido ID: ${id}`);
+  toast('Negócio removido', 'success');
+  renderNegocios();
+}
+
+// =====================================================================
+// EXPORT
+// =====================================================================
+async function exportDealsExcel() {
+  const deals = await getDeals();
+  const rows = deals.map(d => ({
+    Status: d.Status, Empresa: d.Empresa, 'Data Inicial': d.DataInicial, 'Data Final': d.DataFinal,
+    Produto: d.Produto, 'Qtde (KG)': d.QtdeKG, 'Valor Unit. Cliente': d.ValorUnitCliente,
+    'Valor Unit. Mínimo': d.ValorUnitMinimo, 'Valor Total': d.ValorTotal,
+    Comprador: d.Comprador, Telefone: d.Telefone, Email: d.Email,
+    Cidade: d.Cidade, Estado: d.Estado, Vendedor: d.Vendedor,
+    'Nº Briefing': d.NoBriefing, 'KG Briefing Ideal': d.KGBriefingIdeal,
+    'Nº Pedido': d.NoPedido, 'Nº OP': d.NoOP, Observação: d.Observacao,
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'CRM');
+  XLSX.writeFile(wb, `Plastori_CRM_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('Excel exportado!', 'success');
+}
+
+function exportDealsCSV() {
+  getDeals().then(deals => {
+    const headers = ['Status','Empresa','DataInicial','DataFinal','Produto','QtdeKG','ValorUnitCliente','ValorUnitMinimo','ValorTotal','Comprador','Telefone','Email','Cidade','Estado','Vendedor','NoBriefing','KGBriefingIdeal','NoPedido','NoOP','Observacao'];
+    const csv = [headers.join(';')].concat(deals.map(d => headers.map(h => `"${(d[h]||'').toString().replace(/"/g,'""')}"`).join(';'))).join('\n');
+    const blob = new Blob(['\uFEFF'+csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `Plastori_CRM_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    toast('CSV exportado!', 'success');
+  });
+}
+
+async function exportBackupJSON() {
+  const deals = await dbGetAll('deals');
+  const tasks = await dbGetAll('tasks');
+  const logs = await dbGetAll('logs');
+  const payload = { version: 1, ts: new Date().toISOString(), deals, tasks, logs };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `Plastori_Backup_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  toast('Backup exportado!', 'success');
+}
+
+async function restoreBackup(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const text = await file.text();
+  try {
+    const data = JSON.parse(text);
+    if (!data.deals) throw new Error('Formato inválido');
+    if (!confirm(`Restaurar ${data.deals.length} negócios? Os dados atuais serão substituídos.`)) return;
+    for (const d of data.deals) await dbPut('deals', d);
+    for (const t of data.tasks||[]) await dbPut('tasks', t);
+    toast(`${data.deals.length} negócios restaurados!`, 'success');
+    navigate(currentPage);
+  } catch(e) {
+    toast('Arquivo de backup inválido', 'error');
+  }
+  input.value = '';
+}
+
+function importExcelFile() {
+  document.getElementById('importFile').click();
+}
+
+async function handleImportExcel(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const buffer = await file.arrayBuffer();
+  const wb = XLSX.read(buffer, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+  // Find header row
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    if (rows[i] && rows[i].some(c => typeof c === 'string' && c.toLowerCase().includes('status'))) {
+      headerIdx = i; break;
+    }
+  }
+  if (headerIdx < 0) { toast('Cabeçalho não encontrado no Excel', 'error'); return; }
+  const headers = rows[headerIdx];
+  let imported = 0;
+  for (let i = headerIdx+1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || !row[0]) continue;
+    const deal = {};
+    const map = ['Status','Empresa','DataInicial','DataFinal','Produto','QtdeKG','ValorUnitCliente','ValorUnitMinimo','ValorTotal','Comprador','Telefone','Email','Cidade','Estado','Vendedor','NoBriefing','KGBriefingIdeal','NoPedido','NoOP','Observacao'];
+    map.forEach((key, idx) => {
+      const val = row[idx];
+      deal[key] = val != null ? String(val) : '';
+      if (val instanceof Date) deal[key] = val.toISOString().slice(0,10);
+    });
+    await dbPut('deals', deal);
+    imported++;
+  }
+  toast(`${imported} registros importados!`, 'success');
+  navigate(currentPage);
+  input.value = '';
+}
+
+// =====================================================================
+// GLOBAL SEARCH
+// =====================================================================
+async function globalSearchFn(q) {
+  if (!q || q.length < 2) return;
+  filterSearch = q;
+  navigate('negocios');
+}
+
+// =====================================================================
+// TOAST
+// =====================================================================
+function toast(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span>${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span><span>${msg}</span>`;
+  document.getElementById('toastContainer').appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; setTimeout(() => el.remove(), 400); }, 3000);
+}
+
+// =====================================================================
+// EXTENDED SEED DATA
+// =====================================================================
+const NATALIA_DATA = [{"Status":"perdido preço","Empresa":"Saltorelli","DataInicial":"2025-10-15","DataFinal":"2025-10-20","Produto":"Saco Liso Canela","QtdeKG":"1000.0","ValorUnitCliente":"","ValorUnitMinimo":"9.0","ValorTotal":"9000.0","Comprador":"Antonio","Telefone":"(19) 469-9191","Email":"saltorelli@saltorelli.com.br","Cidade":"Americana","Estado":"SP","Vendedor":"Natalia","NoBriefing":"NA001","KGBriefingIdeal":"12.51","NoPedido":"","NoOP":"25100100","Observacao":""},{"Status":"Aprovado","Empresa":"Pollux","DataInicial":"2025-10-30","DataFinal":"2025-11-05","Produto":"Saco transparente liso","QtdeKG":"600.0","ValorUnitCliente":"16.8","ValorUnitMinimo":"16.8","ValorTotal":"10080.0","Comprador":"Raul","Telefone":"(19) 99218-8966","Email":"raul@polluxplastic.com","Cidade":"Santa Barbara D'Oeste","Estado":"SP","Vendedor":"Natalia","NoBriefing":"NA013","KGBriefingIdeal":"20.0","NoPedido":"","NoOP":"25110077","Observacao":""},{"Status":"Aprovado","Empresa":"Selmi Rolandia","DataInicial":"2025-10-27","DataFinal":"2025-10-28","Produto":"Bobina Branca impre","QtdeKG":"500.0","ValorUnitCliente":"","ValorUnitMinimo":"20.9","ValorTotal":"10450.0","Comprador":"Alessandra","Telefone":"(19) 99356-8795","Email":"alessandra@selmi.com.br","Cidade":"Rolandia","Estado":"SP","Vendedor":"Natalia","NoBriefing":"NA003","KGBriefingIdeal":"20.9","NoPedido":"82621","NoOP":"25100102","Observacao":""},{"Status":"Aprovado","Empresa":"Selmi Sumaré","DataInicial":"2025-10-28","DataFinal":"2025-10-28","Produto":"Bobina Branca impre","QtdeKG":"50.0","ValorUnitCliente":"","ValorUnitMinimo":"20.9","ValorTotal":"1045.0","Comprador":"Alessandra","Telefone":"(19) 99356-8795","Email":"alessandra@selmi.com.br","Cidade":"Sumaré","Estado":"SP","Vendedor":"Natalia","NoBriefing":"NA004","KGBriefingIdeal":"20.9","NoPedido":"424685","NoOP":"251000110","Observacao":""},{"Status":"Prospecção","Empresa":"Ajinomoto","DataInicial":"2025-10-29","DataFinal":"","Produto":"","QtdeKG":"","ValorUnitCliente":"","ValorUnitMinimo":"","ValorTotal":"0","Comprador":"","Telefone":"(19) 3404-9000","Email":"Preencher fornc no site","Cidade":"Limeira","Estado":"SP","Vendedor":"Natalia","NoBriefing":"","KGBriefingIdeal":"","NoPedido":"","NoOP":"","Observacao":""},{"Status":"Prospecção","Empresa":"Igeatel","DataInicial":"2025-10-29","DataFinal":"","Produto":"","QtdeKG":"","ValorUnitCliente":"","ValorUnitMinimo":"","ValorTotal":"0","Comprador":"","Telefone":"(19) 3451-4309","Email":"contato@igeatel.com.br","Cidade":"Limeira","Estado":"SP","Vendedor":"Natalia","NoBriefing":"","KGBriefingIdeal":"","NoPedido":"","NoOP":"","Observacao":""},{"Status":"Prospecção","Empresa":"Peccinin","DataInicial":"2025-10-29","DataFinal":"","Produto":"","QtdeKG":"","ValorUnitCliente":"","ValorUnitMinimo":"","ValorTotal":"0","Comprador":"Rodrigo","Telefone":"(19) 98162-8584","Email":"","Cidade":"Limeira","Estado":"SP","Vendedor":"Natalia","NoBriefing":"","KGBriefingIdeal":"","NoPedido":"","NoOP":"","Observacao":""},{"Status":"Aprovado","Empresa":"Frigorífico Marfrig","DataInicial":"2025-10-31","DataFinal":"2025-11-06","Produto":"Saco transparente liso","QtdeKG":"2000.0","ValorUnitCliente":"17.0","ValorUnitMinimo":"17.0","ValorTotal":"34000.0","Comprador":"Fernanda","Telefone":"(19) 99234-5678","Email":"fernanda@marfrig.com.br","Cidade":"Promissão","Estado":"SP","Vendedor":"Natalia","NoBriefing":"NA015","KGBriefingIdeal":"18.5","NoPedido":"83001","NoOP":"25110090","Observacao":"Pedido urgente conforme solicitado"},{"Status":"Aprovado","Empresa":"Ambev","DataInicial":"2025-11-02","DataFinal":"2025-11-15","Produto":"Bobina PEBD impressa","QtdeKG":"5000.0","ValorUnitCliente":"22.0","ValorUnitMinimo":"21.5","ValorTotal":"110000.0","Comprador":"Carlos","Telefone":"(19) 3344-9900","Email":"compras@ambev.com.br","Cidade":"Campinas","Estado":"SP","Vendedor":"Natalia","NoBriefing":"NA018","KGBriefingIdeal":"23.0","NoPedido":"84000","NoOP":"25110120","Observacao":""}];
+
+const MARCELO_DATA = [{"Status":"perdido qtde","Empresa":"ADC BEBIDAS","DataInicial":"2025-10-23","DataFinal":"","Produto":"SACOLAS PLASTICAS","QtdeKG":"200.0","ValorUnitCliente":"","ValorUnitMinimo":"37.31","ValorTotal":"7462.0","Comprador":"ANDERSON","Telefone":"46-9106-2158","Email":"","Cidade":"PATO BRANCO","Estado":"PARANA","Vendedor":"MARCELO","NoBriefing":"MAR001","KGBriefingIdeal":"37.31","NoPedido":"","NoOP":"","Observacao":""},{"Status":"Aprovado","Empresa":"PIRAMIDE","DataInicial":"2025-10-23","DataFinal":"2025-10-24","Produto":"SACOLAS PLASTICAS","QtdeKG":"696.0","ValorUnitCliente":"","ValorUnitMinimo":"33.04","ValorTotal":"22995.84","Comprador":"ELIANE","Telefone":"","Email":"","Cidade":"PIRES DO RIO","Estado":"GOIAS","Vendedor":"LAERTH","NoBriefing":"MAR002","KGBriefingIdeal":"31.87","NoPedido":"","NoOP":"","Observacao":""},{"Status":"Aprovado","Empresa":"MIX 10","DataInicial":"2025-10-24","DataFinal":"2025-10-24","Produto":"SACOLAS PLASTICAS","QtdeKG":"450.0","ValorUnitCliente":"","ValorUnitMinimo":"30.31","ValorTotal":"13639.5","Comprador":"SUIANY","Telefone":"49-9973-5519","Email":"","Cidade":"QUILOMBO","Estado":"SC","Vendedor":"MARCELO","NoBriefing":"MAR003","KGBriefingIdeal":"29.25","NoPedido":"","NoOP":"","Observacao":""},{"Status":"perdido preço","Empresa":"JANDIRA","DataInicial":"2025-10-23","DataFinal":"","Produto":"BOBINA PEBD","QtdeKG":"3000.0","ValorUnitCliente":"","ValorUnitMinimo":"20.28","ValorTotal":"60840.0","Comprador":"","Telefone":"","Email":"","Cidade":"JANDIRA","Estado":"SP","Vendedor":"JOSIANE","NoBriefing":"MAR004","KGBriefingIdeal":"20.28","NoPedido":"","NoOP":"","Observacao":"INFELIZMENTE CLIENTE NÃO INFORMA"},{"Status":"perdido qtde","Empresa":"HELENA CONF","DataInicial":"2025-10-27","DataFinal":"2025-10-30","Produto":"SACOLAS PLASTICAS","QtdeKG":"100.0","ValorUnitCliente":"","ValorUnitMinimo":"31.3","ValorTotal":"3130.0","Comprador":"HELENA","Telefone":"93-99106-2045","Email":"","Cidade":"Medicilandia","Estado":"Pará","Vendedor":"MARCELO","NoBriefing":"MAR005","KGBriefingIdeal":"28.85","NoPedido":"","NoOP":"","Observacao":""},{"Status":"Aprovado","Empresa":"LABODENTAL","DataInicial":"2025-10-28","DataFinal":"2025-10-28","Produto":"SACOLAS PLASTICAS","QtdeKG":"160.0","ValorUnitCliente":"","ValorUnitMinimo":"36.52","ValorTotal":"5843.2","Comprador":"NORMAM","Telefone":"","Email":"","Cidade":"BELEM","Estado":"PARÁ","Vendedor":"JOAO","NoBriefing":"MAR007","KGBriefingIdeal":"33.97","NoPedido":"","NoOP":"","Observacao":""}];
+
+const ADELITA_DATA = [{"Status":"Prospecção","Empresa":"Deca","DataInicial":"2026-01-05","DataFinal":"","Produto":"","QtdeKG":"","ValorUnitCliente":"","ValorUnitMinimo":"","ValorTotal":"0","Comprador":"Compras","Telefone":"","Email":"compras@casadexco.com.br","Cidade":"AMERICANA","Estado":"SP","Vendedor":"ADELITA","NoBriefing":"","KGBriefingIdeal":"","NoPedido":"","NoOP":"","Observacao":""},{"Status":"Prospecção","Empresa":"Amanco Ind","DataInicial":"2026-01-05","DataFinal":"","Produto":"","QtdeKG":"","ValorUnitCliente":"","ValorUnitMinimo":"","ValorTotal":"0","Comprador":"Compras","Telefone":"","Email":"compras@walin.com.br","Cidade":"","Estado":"","Vendedor":"ADELITA","NoBriefing":"","KGBriefingIdeal":"","NoPedido":"","NoOP":"","Observacao":""},{"Status":"Prospecção","Empresa":"Krona","DataInicial":"2026-01-05","DataFinal":"","Produto":"","QtdeKG":"","ValorUnitCliente":"","ValorUnitMinimo":"","ValorTotal":"0","Comprador":"Compras","Telefone":"","Email":"Compras@crona.com.br","Cidade":"","Estado":"","Vendedor":"ADELITA","NoBriefing":"","KGBriefingIdeal":"","NoPedido":"","NoOP":"","Observacao":""},{"Status":"Prospecção","Empresa":"Corr Plastic","DataInicial":"2026-01-05","DataFinal":"","Produto":"","QtdeKG":"","ValorUnitCliente":"","ValorUnitMinimo":"","ValorTotal":"0","Comprador":"Compras","Telefone":"","Email":"pead@corr.com.br","Cidade":"","Estado":"","Vendedor":"ADELITA","NoBriefing":"","KGBriefingIdeal":"","NoPedido":"","NoOP":"","Observacao":""},{"Status":"Prospecção","Empresa":"Plastubos","DataInicial":"2026-01-05","DataFinal":"","Produto":"","QtdeKG":"","ValorUnitCliente":"","ValorUnitMinimo":"","ValorTotal":"0","Comprador":"Compras","Telefone":"","Email":"compras@plastubos.com.br","Cidade":"","Estado":"","Vendedor":"ADELITA","NoBriefing":"","KGBriefingIdeal":"","NoPedido":"","NoOP":"","Observacao":""},{"Status":"Prospecção","Empresa":"Schineider Eletric Brasil","DataInicial":"2026-01-05","DataFinal":"","Produto":"","QtdeKG":"","ValorUnitCliente":"","ValorUnitMinimo":"","ValorTotal":"0","Comprador":"Compras","Telefone":"","Email":"compras@schineider.com.br","Cidade":"","Estado":"","Vendedor":"ADELITA","NoBriefing":"","KGBriefingIdeal":"","NoPedido":"","NoOP":"","Observacao":""},{"Status":"Aprovado","Empresa":"Tigre SA","DataInicial":"2026-01-10","DataFinal":"2026-01-20","Produto":"Bobina PEBD Natural","QtdeKG":"3000.0","ValorUnitCliente":"18.5","ValorUnitMinimo":"18.0","ValorTotal":"55500.0","Comprador":"João Silva","Telefone":"(19) 3300-1111","Email":"joao@tigre.com.br","Cidade":"Joinville","Estado":"SC","Vendedor":"ADELITA","NoBriefing":"ADE001","KGBriefingIdeal":"19.0","NoPedido":"90001","NoOP":"26010055","Observacao":"Pedido confirmado após visita técnica"}];
+
+// =====================================================================
+// KEYBOARD SHORTCUTS
+// =====================================================================
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-overlay.open').forEach(m => m.classList.remove('open'));
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'n' && currentUser) {
+    e.preventDefault(); openAddDeal();
+  }
+});
+
+// Close modal on overlay click
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) overlay.classList.remove('open');
+  });
+});
+
+// Login on Enter
+document.getElementById('loginPass').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+// =====================================================================
+// BOOT
+// =====================================================================
+boot();
+</script>
+</body>
+</html>
