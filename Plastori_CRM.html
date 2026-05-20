@@ -91,6 +91,7 @@ table{width:100%;border-collapse:collapse;font-size:12.5px}thead th{background:v
       <button class="ni" onclick="nav('tarefas')"><span class="ni-icon">✅</span><span>Tarefas</span></button>
       <button class="ni" onclick="nav('relatorios')"><span class="ni-icon">📈</span><span>Relatórios</span></button>
       <button class="ni adm" onclick="nav('admin')" style="display:none"><span class="ni-icon">⚙️</span><span>Administração</span></button>
+      <button class="ni" onclick="nav('ia')"><span class="ni-icon">🤖</span><span>Assistente IA</span></button>
       <button class="ni adm" onclick="nav('firebase')" style="display:none"><span class="ni-icon">🔥</span><span>Firebase</span></button>
     </nav>
     <div class="sbft">
@@ -130,9 +131,9 @@ table{width:100%;border-collapse:collapse;font-size:12.5px}thead th{background:v
         <div><label class="flbl">Data Inicial</label><input type="date" id="fdi" class="fld"></div>
         <div><label class="flbl">Data Final</label><input type="date" id="fdf" class="fld"></div>
         <div class="full"><label class="flbl">Produto</label><input type="text" id="fprod" class="fld" placeholder="Descrição do produto"></div>
-        <div><label class="flbl">Qtde (KG)</label><input type="number" id="fqtd" class="fld" step="0.01"></div>
+        <div><label class="flbl">Qtde (KG)</label><input type="number" id="fqtd" class="fld" step="0.01" oninput="calcTotal()"></div>
         <div><label class="flbl">Valor Unit. Cliente (R$)</label><input type="number" id="fvc" class="fld" step="0.01"></div>
-        <div><label class="flbl">Valor Unit. Mínimo (R$)</label><input type="number" id="fvm" class="fld" step="0.01"></div>
+        <div><label class="flbl">Valor Unit. Mínimo (R$)</label><input type="number" id="fvm" class="fld" step="0.01" oninput="calcTotal()"></div>
         <div><label class="flbl">Valor Total (R$)</label><input type="number" id="fvt" class="fld" step="0.01"></div>
         <div><label class="flbl">KG Briefing Ideal</label><input type="number" id="fkg" class="fld" step="0.01"></div>
         <div><label class="flbl">Comprador</label><input type="text" id="fcomp" class="fld"></div>
@@ -372,7 +373,14 @@ async function dbGet(st,id){
 // =====================================================================
 // ESTADO
 // =====================================================================
-let CU=null,CP='dashboard',AD=[],AT=[],EID=null,DP=1,FS='',FQ='';
+let CU=null,CP='dashboard',AD=[],AT=[],EID=null,EDIT_OBJ=null,DP=1,FS='',FQ='',FV='';
+let TASK_OP=[],TASK_DN=[];
+
+// Global deal cache for reliable edit/delete by key
+let DEAL_MAP={};
+function storeDealMap(deals){DEAL_MAP={};deals.forEach(d=>{const k=String(d.id||d._fid||'');if(k)DEAL_MAP[k]=d;})}
+function getDealByKey(k){return DEAL_MAP[String(k)]||null;}
+
 const PPG=25;
 
 // =====================================================================
@@ -382,8 +390,6 @@ async function boot(){
   loadFBConfig();
   await openDB();
 
-  // Limpa cache antigo de versões anteriores
-  ['PlastoriCRM2','PlastoriCRM3'].forEach(n=>{try{indexedDB.deleteDatabase(n)}catch(e){}});
   // Garante credenciais no localStorage para a tela de config mostrar preenchido
   if(!localStorage.getItem('plastori_fb_cfg')){
     localStorage.setItem('plastori_fb_cfg', JSON.stringify(FIREBASE_CONFIG));
@@ -425,7 +431,7 @@ async function boot(){
     console.log('[Plastori] Seeded',total,'records');
   }
 
-  const sess=sessionStorage.getItem('pcu');
+  const sess=localStorage.getItem('pcu');
   if(sess){CU=JSON.parse(sess);showApp();}
 }
 
@@ -453,7 +459,7 @@ async function doLogin(){
   const user=await _idbGet('users',u);
   if(!user){er.textContent='Usuário não encontrado.';return}
   if(sHash(p)!==user.passHash){er.textContent='Senha incorreta.';return}
-  CU=user;sessionStorage.setItem('pcu',JSON.stringify(user));
+  CU=user;localStorage.setItem('pcu',JSON.stringify(user));
   addLog('Login: '+user.name);er.textContent='';
   if(user.firstLogin){
     document.getElementById('loginScreen').style.display='none';
@@ -468,13 +474,13 @@ async function setNewPass(){
   if(p1!==p2){er.textContent='Senhas não coincidem.';return}
   const up={...CU,passHash:sHash(p1),firstLogin:false};
   await _idbPut('users',up);
-  CU=up;sessionStorage.setItem('pcu',JSON.stringify(up));
+  CU=up;localStorage.setItem('pcu',JSON.stringify(up));
   document.getElementById('setPassScreen').classList.remove('open');
   toast('Senha definida com sucesso!','ok');showApp();
 }
 
 function doLogout(){
-  sessionStorage.removeItem('pcu');CU=null;
+  localStorage.removeItem('pcu');CU=null;
   document.getElementById('app').style.display='none';
   document.getElementById('loginScreen').style.display='flex';
   document.getElementById('lu').value='';document.getElementById('lp').value='';
@@ -499,10 +505,10 @@ function nav(p){
   document.querySelectorAll('.ni').forEach(e=>e.classList.remove('active'));
   const b=document.querySelector(`.ni[onclick*="${p}"]`);if(b)b.classList.add('active');
   const T={dashboard:'Dashboard',funil:'Funil de Vendas',negocios:'Negócios',clientes:'Clientes',
-    tarefas:'Tarefas',relatorios:'Relatórios',admin:'Administração',firebase:'Configurar Firebase'};
+    tarefas:'Tarefas',relatorios:'Relatórios',admin:'Administração',firebase:'Configurar Firebase',ia:'Assistente IA'};
   document.getElementById('ptitle').textContent=T[p]||p;
   const M={dashboard:rDash,funil:rFunil,negocios:rNeg,clientes:rClients,
-    tarefas:rTasks,relatorios:rReports,admin:rAdmin,firebase:rFirebase};
+    tarefas:rTasks,relatorios:rReports,admin:rAdmin,firebase:rFirebase,ia:rIA};
   if(M[p])M[p]();
 }
 
@@ -739,6 +745,7 @@ async function rDash(){
 async function rFunil(){
   document.getElementById('content').innerHTML='<div style="text-align:center;padding:40px;color:var(--muted)">Carregando funil...</div>';
   const deals=await getDeals();
+  storeDealMap(deals);
   const cols=[
     {key:'prospecção',label:'Prospecção',color:'#3b82f6'},
     {key:'orçamento',label:'Orçamento',color:'#f59e0b'},
@@ -764,11 +771,11 @@ async function rFunil(){
           <div class="fcolsub">${fMoney(tot)}</div>
           <div class="fcolbody">
             ${items.length===0?'<div style="font-size:11px;color:var(--dim);padding:10px;text-align:center">Nenhum</div>':
-              items.map(d=>`<div class="fitem" onclick="openEdit(${JSON.stringify(d.id||d._fid)})">
+              items.map(d=>{const _k=String(d.id||d._fid||d.Empresa||'');return`<div class="fitem" onclick="openFunilItem('${_k}')">
                 <div class="fitem-co">${d.Empresa||'–'}</div>
                 <div class="fitem-pr">${d.Produto||''}</div>
                 ${d.ValorTotal&&parseFloat(d.ValorTotal)?`<div class="fitem-val">${fMoney(d.ValorTotal)}</div>`:''}
-              </div>`).join('')
+              </div>`}).join('')
             }
           </div>
         </div>`}).join('')}
@@ -780,11 +787,12 @@ async function rFunil(){
 // =====================================================================
 async function rNeg(){
   document.getElementById('content').innerHTML='<div style="text-align:center;padding:40px;color:var(--muted)">Carregando negócios...</div>';
-  AD=await getDeals();rNegTable();
+  AD=await getDeals();storeDealMap(AD);rNegTable();
 }
 function rNegTable(){
   let f=AD;
   if(FS)f=f.filter(d=>(d.Status||'').toLowerCase().includes(FS.toLowerCase()));
+  if(FV)f=f.filter(d=>(d.Vendedor||'').toUpperCase().includes(FV.toUpperCase()));
   if(FQ){const q=FQ.toLowerCase();f=f.filter(d=>
     (d.Empresa||'').toLowerCase().includes(q)||(d.Produto||'').toLowerCase().includes(q)||
     (d.NoBriefing||'').toLowerCase().includes(q)||(d.Comprador||'').toLowerCase().includes(q)||
@@ -811,6 +819,13 @@ function rNegTable(){
         <option value="orçamento">Orçamento</option><option value="perdido">Perdido</option>
         <option value="amostra">Amostra</option><option value="reprovado">Reprovado</option>
       </select>
+      <select class="fsel" id="fVendedor" onchange="FV=this.value;DP=1;rNegTable()" style="display:none">
+        <option value="">Todos Vendedores</option>
+        <option value="NAYLA">Nayla</option>
+        <option value="NATALIA">Natalia</option>
+        <option value="MARCELO">Marcelo</option>
+        <option value="ADELITA">Adelita</option>
+      </select>
       <input type="text" class="finp" placeholder="🔍 Empresa, produto, cidade..." value="${FQ}" oninput="FQ=this.value;DP=1;rNegTable()" style="width:260px">
       <button class="btn btn-brand btn-sm" onclick="openAdd()">+ Novo</button>
       <button class="btn btn-ghost btn-sm" onclick="expXLS()">📥 Excel</button>
@@ -822,7 +837,7 @@ function rNegTable(){
           <thead><tr><th>Status</th><th>Empresa</th><th>Produto</th><th>Qtde KG</th><th>Valor Total</th><th>Data Inicial</th><th>Vendedor</th><th>Briefing</th><th>Ações</th></tr></thead>
           <tbody>
             ${pd.length===0?`<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:24px">Nenhum resultado</td></tr>`:
-              pd.map(d=>`<tr>
+              pd.map((d,i)=>`<tr>
                 <td>${sBadge(d.Status)}</td>
                 <td title="${d.Empresa||''}" style="font-weight:500">${(d.Empresa||'–').substring(0,28)}</td>
                 <td title="${d.Produto||''}">${(d.Produto||'').substring(0,25)}</td>
@@ -832,8 +847,8 @@ function rNegTable(){
                 <td>${d.Vendedor||'–'}</td>
                 <td style="font-family:'DM Mono',monospace;font-size:11px">${d.NoBriefing||'–'}</td>
                 <td style="white-space:nowrap">
-                  <button class="btn btn-ghost btn-sm" onclick="openEdit(${JSON.stringify(d.id||d._fid)})">✏️</button>
-                  <button class="btn btn-danger btn-sm" onclick="delDeal(${JSON.stringify(d.id||d._fid)})">🗑</button>
+                  <button class="btn btn-ghost btn-sm" onclick="openEditIdx(${s+i})">✏️</button>
+                  <button class="btn btn-danger btn-sm" onclick="delDealIdx(${s+i})">🗑</button>
                 </td>
               </tr>`).join('')}
           </tbody>
@@ -844,6 +859,9 @@ function rNegTable(){
         <div class="pgbtns">${pgHtml}</div>
       </div>
     </div>`;
+  // Mostra filtro de vendedor apenas para admin/consultoria
+  const vf=document.getElementById('fVendedor');
+  if(vf) vf.style.display=(CU&&CU.role==='admin')?'':'none';
 }
 
 // =====================================================================
@@ -886,6 +904,7 @@ async function rTasks(){
   AT=await dbAll('tasks');
   const mt=AT.filter(t=>!t.uid||t.uid===CU.username);
   const op=mt.filter(t=>!t.done),dn=mt.filter(t=>t.done);
+  TASK_OP=op; TASK_DN=dn; // store for index-based access
   const pri={'urgente':'br','alta':'by','normal':'bgr'};
   document.getElementById('content').innerHTML=`
     <div class="ptitle">Tarefas & Follow-up</div>
@@ -897,20 +916,25 @@ async function rTasks(){
     </div>
     <div id="top">
       ${op.length===0?'<div class="empty"><div class="empty-ico">✅</div><div>Nenhuma tarefa pendente!</div></div>':
-        op.map(t=>`<div class="taskitem">
-          <div class="tcheck" onclick="togTask(${JSON.stringify(t.id||t._fid)})">&#10003;</div>
-          <div class="tinfo"><div class="ttask">${t.title}</div><div class="tmeta">${t.client||''}</div></div>
-          <span class="badge ${pri[t.priority]||'bgr'}">${t.priority||'normal'}</span>
-          <span style="font-size:10px;color:var(--dim);font-family:'DM Mono',monospace">${t.date||''}</span>
-          <button class="btn btn-danger btn-sm" onclick="delTask(${JSON.stringify(t.id||t._fid)})">✕</button>
-        </div>`).join('')}
+        op.map((t,ti)=>{
+          const isOverdue=t.date&&new Date(t.date)<new Date()&&!t.done;
+          return`<div class="taskitem" style="${isOverdue?'border-left:3px solid var(--red);':''}">
+            <div class="tcheck" onclick="togTaskIdx(${ti},'op')">&#10003;</div>
+            <div class="tinfo">
+              <div class="ttask">${t.title} ${isOverdue?'<span class="badge br">⚠ Atrasada</span>':''}</div>
+              <div class="tmeta">${t.client||''}</div>
+            </div>
+            <span class="badge ${pri[t.priority]||'bgr'}">${t.priority||'normal'}</span>
+            <span style="font-size:10px;color:${isOverdue?'var(--red)':'var(--dim)'};font-family:'DM Mono',monospace">${t.date||''}</span>
+            <button class="btn btn-danger btn-sm" onclick="delTaskIdx(${ti},'op')">🗑</button>
+          </div>`}).join('')}
     </div>
     <div id="tdn" style="display:none">
       ${dn.length===0?'<div class="empty"><div class="empty-ico">📋</div><div>Nenhuma concluída ainda.</div></div>':
-        dn.map(t=>`<div class="taskitem" style="opacity:.5">
-          <div class="tcheck done">&#10003;</div>
+        dn.map((t,di)=>`<div class="taskitem" style="opacity:.5">
+          <div class="tcheck done" onclick="togTaskIdx(${di},'dn')">&#10003;</div>
           <div class="tinfo"><div class="ttask" style="text-decoration:line-through">${t.title}</div><div class="tmeta">${t.client||''}</div></div>
-          <button class="btn btn-danger btn-sm" onclick="delTask(${JSON.stringify(t.id||t._fid)})">✕</button>
+          <button class="btn btn-danger btn-sm" onclick="delTaskIdx(${di},'dn')">🗑</button>
         </div>`).join('')}
     </div>`;
 }
@@ -933,7 +957,41 @@ async function togTask(id){
   const all=await dbAll('tasks');const t=all.find(x=>(x.id||x._fid)===id);
   if(t){await dbPut('tasks',{...t,done:!t.done});rTasks()}
 }
-async function delTask(id){await dbDel('tasks',id);rTasks()}
+async function togTaskIdx(idx, list){
+  const t = list==='op' ? TASK_OP[idx] : TASK_DN[idx];
+  if(!t){toast('Tarefa não encontrada','err');return;}
+  const updated={...t,done:!t.done};
+  // Save to IndexedDB
+  if(t.id)try{await _idbPut('tasks',updated);}catch(e){}
+  // Save to Firestore
+  if(FB_READY){
+    const fid=t.id||t._fid;
+    if(fid)try{await _fsPut('tasks',updated);}catch(e){}
+  }
+  rTasks();
+}
+
+async function delTaskIdx(idx, list){
+  const t = list==='op' ? TASK_OP[idx] : TASK_DN[idx];
+  if(!t){toast('Tarefa não encontrada','err');return;}
+  if(!confirm('Remover tarefa "'+t.title+'"?'))return;
+  // Delete from IndexedDB
+  if(t.id)try{await _idbDel('tasks',t.id);}catch(e){}
+  // Delete from Firestore
+  if(FB_READY){
+    const fid=t.id||t._fid;
+    if(fid)try{await _fsDel('tasks',String(fid));}catch(e){}
+  }
+  toast('Tarefa removida ✓','ok');
+  rTasks();
+}
+
+async function delTask(id){
+  try{await dbDel('tasks',id);}catch(e){}
+  try{await dbDel('tasks',String(id));}catch(e){}
+  toast('Tarefa removida','ok');
+  rTasks();
+}
 
 // =====================================================================
 // RELATÓRIOS
@@ -1086,6 +1144,51 @@ function openAdd(){
   });
   document.getElementById('dealMod').classList.add('open');
 }
+// Index-based edit/delete — reliable regardless of ID type
+async function openEditIdx(idx){
+  const d=AD[idx];
+  if(!d){toast('Negócio não encontrado','err');return;}
+  EID=d.id||d._fid||null;
+  EDIT_OBJ=d; // store reference
+  document.getElementById('dmodtitle').textContent='Editar Negócio';
+  document.getElementById('fs').value=d.Status||'Prospecção';
+  document.getElementById('fe').value=d.Empresa||'';
+  document.getElementById('fdi').value=d.DataInicial||'';
+  document.getElementById('fdf').value=d.DataFinal||'';
+  document.getElementById('fprod').value=d.Produto||'';
+  document.getElementById('fqtd').value=d.QtdeKG||'';
+  document.getElementById('fvc').value=d.ValorUnitCliente||'';
+  document.getElementById('fvm').value=d.ValorUnitMinimo||'';
+  document.getElementById('fvt').value=d.ValorTotal||'';
+  document.getElementById('fkg').value=d.KGBriefingIdeal||'';
+  document.getElementById('fcomp').value=d.Comprador||'';
+  document.getElementById('ftel').value=d.Telefone||'';
+  document.getElementById('femail').value=d.Email||'';
+  document.getElementById('fcid').value=d.Cidade||'';
+  document.getElementById('fest').value=d.Estado||'';
+  document.getElementById('fbri').value=d.NoBriefing||'';
+  document.getElementById('fped').value=d.NoPedido||'';
+  document.getElementById('fop').value=d.NoOP||'';
+  document.getElementById('fobs').value=d.Observacao||'';
+  document.getElementById('dealMod').classList.add('open');
+}
+
+async function delDealIdx(idx){
+  const d=AD[idx];
+  if(!d){toast('Negócio não encontrado','err');return;}
+  if(!confirm('Remover "'+( d.Empresa||'este negócio')+'" permanentemente?'))return;
+  const id=d.id||d._fid;
+  // Delete from IndexedDB
+  if(d.id)try{await _idbDel('deals',d.id);}catch(e){}
+  // Delete from Firestore
+  if(FB_READY&&id){
+    try{await _fsDel('deals',String(id));}catch(e){console.warn('Firestore del:',e)}
+  }
+  addLog('Removido: '+(d.Empresa||id));
+  toast('"'+(d.Empresa||'Negócio')+'" removido','ok');
+  rNeg();
+}
+
 async function openEdit(id){
   const all=await dbAll('deals');
   const d=all.find(x=>(x.id||x._fid)===id);if(!d)return;
@@ -1128,10 +1231,14 @@ async function saveDeal(){
     Observacao:document.getElementById('fobs').value,
     updatedAt:new Date().toISOString()
   };
-  if(EID){
-    const all=await dbAll('deals');const ex=all.find(x=>(x.id||x._fid)===EID);
-    const merged={...ex,...deal};
-    await dbPut('deals',merged);
+  if(EID!==null&&EDIT_OBJ){
+    const merged={...EDIT_OBJ,...deal};
+    // Save to IndexedDB
+    if(EDIT_OBJ.id)try{await _idbPut('deals',merged);}catch(err){}
+    // Save to Firestore
+    if(FB_READY){
+      try{await _fsPut('deals',merged);}catch(err){console.warn('Firestore put:',err)}
+    }
     addLog('Editado: '+e);toast('Negócio atualizado!','ok');
   }else{
     const id='deal_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
@@ -1146,7 +1253,10 @@ async function saveDeal(){
 }
 async function delDeal(id){
   if(!confirm('Remover este negócio permanentemente?'))return;
-  await dbDel('deals',id);addLog('Removido: '+id);toast('Removido','ok');rNeg();
+  // Try both string and numeric forms
+  try{ await dbDel('deals',id); }catch(e){}
+  try{ await dbDel('deals',String(id)); }catch(e){}
+  addLog('Removido: '+id);toast('Removido','ok');rNeg();
 }
 
 // =====================================================================
@@ -1259,6 +1369,217 @@ document.addEventListener('keydown',e=>{
 });
 document.querySelectorAll('.moverlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open')}));
 document.getElementById('lp').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
+
+
+// ================================================================
+// CALCULO AUTOMÁTICO — Valor Total = Qtde KG × Valor Unit. Mínimo
+// ================================================================
+function calcTotal(){
+  const qtd=parseFloat(document.getElementById('fqtd')?.value)||0;
+  const vmin=parseFloat(document.getElementById('fvm')?.value)||0;
+  const vvc=parseFloat(document.getElementById('fvc')?.value)||0;
+  if(qtd>0&&vmin>0){
+    document.getElementById('fvt').value=(qtd*vmin).toFixed(2);
+  }
+}
+
+// ================================================================
+// IA ASSISTENTE — Sugestões inteligentes para vendedores
+// ================================================================
+async function rIA(){
+  document.getElementById('content').innerHTML='<div style="text-align:center;padding:40px;color:var(--muted)">🤖 Analisando dados...</div>';
+  
+  const deals = await getDeals();
+  const today = new Date();
+  
+  // 1. Clientes sem movimento há +5 dias
+  const clientLastContact = {};
+  deals.forEach(d=>{
+    const c = d.Empresa||'';
+    if(!c)return;
+    const dt = d.DataInicial||d.updatedAt||d.createdAt;
+    if(!dt)return;
+    const date = new Date(dt);
+    if(!clientLastContact[c]||date>clientLastContact[c].date){
+      clientLastContact[c]={date,status:d.Status,produto:d.Produto,valor:d.ValorTotal};
+    }
+  });
+  
+  const semMovimento=Object.entries(clientLastContact)
+    .map(([name,info])=>({name,days:Math.floor((today-info.date)/(1000*60*60*24)),
+      status:info.status,produto:info.produto,valor:info.valor}))
+    .filter(c=>c.days>=5&&!['aprovado'].includes((c.status||'').toLowerCase()))
+    .sort((a,b)=>b.days-a.days).slice(0,10);
+
+  // 2. Maiores oportunidades em aberto
+  const emAberto=deals
+    .filter(d=>{const s=(d.Status||'').toLowerCase();return s==='prospecção'||s==='orçamento'})
+    .filter(d=>parseFloat(d.ValorTotal)>0)
+    .sort((a,b)=>(parseFloat(b.ValorTotal)||0)-(parseFloat(a.ValorTotal)||0))
+    .slice(0,8);
+
+  // 3. Clientes com histórico de aprovação (potencial recompra)
+  const aprovados={};
+  deals.filter(d=>(d.Status||'').toLowerCase()==='aprovado').forEach(d=>{
+    const c=d.Empresa||'';
+    if(!aprovados[c])aprovados[c]={count:0,total:0,lastDate:null,produto:d.Produto};
+    aprovados[c].count++;
+    aprovados[c].total+=(parseFloat(d.ValorTotal)||0);
+    const dt=new Date(d.DataInicial||'');
+    if(!aprovados[c].lastDate||dt>aprovados[c].lastDate)aprovados[c].lastDate=dt;
+  });
+  const recompra=Object.entries(aprovados)
+    .map(([name,info])=>({name,...info,
+      daysSince:Math.floor((today-info.lastDate)/(1000*60*60*24))}))
+    .filter(c=>c.daysSince>=10)
+    .sort((a,b)=>b.total-a.total).slice(0,8);
+
+  // 4. Negócios perdidos recentes (possível recuperação)
+  const perdidos=deals
+    .filter(d=>{const s=(d.Status||'').toLowerCase();return s.startsWith('perdido')})
+    .filter(d=>d.DataInicial&&Math.floor((today-new Date(d.DataInicial))/(1000*60*60*24))<=30)
+    .sort((a,b)=>(parseFloat(b.ValorTotal)||0)-(parseFloat(a.ValorTotal)||0))
+    .slice(0,6);
+
+  // 5. Stats resumo
+  const totalAberto=emAberto.reduce((s,d)=>s+(parseFloat(d.ValorTotal)||0),0);
+  const aprovTot=deals.filter(d=>(d.Status||'').toLowerCase()==='aprovado')
+    .reduce((s,d)=>s+(parseFloat(d.ValorTotal)||0),0);
+
+  document.getElementById('content').innerHTML=`
+    <div class="ptitle">🤖 Assistente de Vendas IA</div>
+    <div class="psub">Análise inteligente baseada nos seus dados · Atualizado agora</div>
+
+    <!-- ALERTAS URGENTES -->
+    ${semMovimento.length>0?`
+    <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:12px;padding:18px;margin-bottom:16px">
+      <div style="font-size:13px;font-weight:700;color:var(--red);margin-bottom:12px">
+        🚨 ${semMovimento.length} clientes sem contato há mais de 5 dias
+      </div>
+      ${semMovimento.map(c=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border-radius:8px;margin-bottom:6px">
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:600">${c.name}</div>
+            <div style="font-size:11px;color:var(--muted)">${c.produto||'–'} · ${sBadge(c.status)}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:12px;font-weight:700;color:var(--red)">${c.days} dias</div>
+            <div style="font-size:11px;color:var(--muted)">${fMoney(c.valor)}</div>
+          </div>
+          <button class="btn btn-brand btn-sm" onclick="criarTarefaIA('${c.name.replace(/'/g,"\'")}','Follow-up urgente')">+ Tarefa</button>
+        </div>
+      `).join('')}
+    </div>`:
+    '<div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:12px;padding:14px;margin-bottom:16px;font-size:13px;color:var(--green)">✅ Todos os clientes foram contatados nos últimos 5 dias!</div>'}
+
+    <div class="cgrid">
+      <!-- MAIORES OPORTUNIDADES -->
+      <div class="cc">
+        <div class="cctitle">💰 Maiores Oportunidades em Aberto</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Total: ${fMoney(totalAberto)}</div>
+        ${emAberto.length===0?'<div style="color:var(--dim);font-size:12px">Nenhuma oportunidade aberta</div>':
+          emAberto.map(d=>`
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border-radius:7px;margin-bottom:5px">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.Empresa||'–'}</div>
+                <div style="font-size:10px;color:var(--muted)">${sBadge(d.Status)}</div>
+              </div>
+              <div style="font-size:12px;font-weight:700;color:var(--green);white-space:nowrap">${fMoney(d.ValorTotal)}</div>
+              <button class="btn btn-ghost btn-sm" onclick="criarTarefaIA('${(d.Empresa||'').replace(/'/g,"\'")}','Follow-up oportunidade')">+ Tarefa</button>
+            </div>
+          `).join('')}
+      </div>
+
+      <!-- RECOMPRA -->
+      <div class="cc">
+        <div class="cctitle">🔄 Potencial Recompra</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Clientes aprovados sem contato recente</div>
+        ${recompra.length===0?'<div style="color:var(--dim);font-size:12px">Nenhum cliente identificado</div>':
+          recompra.map(c=>`
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border-radius:7px;margin-bottom:5px">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;font-weight:600">${c.name}</div>
+                <div style="font-size:10px;color:var(--muted)">${c.count}x comprou · ${c.daysSince} dias atrás</div>
+              </div>
+              <div style="font-size:12px;font-weight:700;color:var(--brand);white-space:nowrap">${fMoney(c.total)}</div>
+              <button class="btn btn-ghost btn-sm" onclick="criarTarefaIA('${c.name.replace(/'/g,"\'")}','Contato recompra')">+ Tarefa</button>
+            </div>
+          `).join('')}
+      </div>
+    </div>
+
+    <!-- PERDIDOS RECUPERÁVEIS -->
+    ${perdidos.length>0?`
+    <div class="cc" style="margin-bottom:16px">
+      <div class="cctitle">♻️ Negócios Perdidos Recentes — Possível Recuperação (últimos 30 dias)</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px;margin-top:4px">
+        ${perdidos.map(d=>`
+          <div style="padding:10px 12px;background:var(--surface2);border-radius:8px;border-left:3px solid var(--red)">
+            <div style="font-size:12px;font-weight:600">${d.Empresa||'–'}</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px">${d.Produto||''}</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
+              <span style="font-size:11px;color:var(--red)">${sBadge(d.Status)}</span>
+              <span style="font-size:12px;font-weight:700;color:var(--text)">${fMoney(d.ValorTotal)}</span>
+            </div>
+            <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:6px" onclick="criarTarefaIA('${(d.Empresa||'').replace(/'/g,"\'")}','Tentativa recuperação')">+ Criar Follow-up</button>
+          </div>
+        `).join('')}
+      </div>
+    </div>`:''
+    }
+
+    <!-- RESUMO IA -->
+    <div class="cc">
+      <div class="cctitle">📋 Resumo de Recomendações</div>
+      <div style="font-size:12.5px;line-height:2;color:var(--muted)">
+        ${semMovimento.length>0?`<div>🔴 <strong style="color:var(--text)">${semMovimento.length} clientes</strong> precisam de contato urgente</div>`:''}
+        ${emAberto.length>0?`<div>💰 <strong style="color:var(--text)">${emAberto.length} oportunidades</strong> abertas valendo ${fMoney(totalAberto)}</div>`:''}
+        ${recompra.length>0?`<div>🔄 <strong style="color:var(--text)">${recompra.length} clientes</strong> com potencial de recompra</div>`:''}
+        ${perdidos.length>0?`<div>♻️ <strong style="color:var(--text)">${perdidos.length} negócios perdidos</strong> recentes — vale tentar recuperar</div>`:''}
+        <div style="margin-top:8px;padding:10px;background:rgba(232,98,26,.08);border-radius:8px;border:1px solid rgba(232,98,26,.2);color:var(--text)">
+          💡 <strong>Dica do dia:</strong> Foque primeiro nos clientes com oportunidades de maior valor em aberto. Um follow-up no momento certo pode ser a diferença entre ganhar ou perder o negócio.
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function criarTarefaIA(empresa, tipo){
+  document.getElementById('tt').value = tipo + ': ' + empresa;
+  document.getElementById('tc').value = empresa;
+  const d = new Date(); d.setDate(d.getDate()+1);
+  document.getElementById('td').value = d.toISOString().slice(0,10);
+  document.getElementById('tp').value = 'alta';
+  document.getElementById('taskMod').classList.add('open');
+}
+
+async function openFunilItem(key){
+  const d=DEAL_MAP[key];
+  if(!d){toast('Negócio não encontrado','err');return;}
+  EID=d.id||d._fid||null;
+  EDIT_OBJ=d;
+  document.getElementById('dmodtitle').textContent='Editar Negócio';
+  document.getElementById('fs').value=d.Status||'Prospecção';
+  document.getElementById('fe').value=d.Empresa||'';
+  document.getElementById('fdi').value=d.DataInicial||'';
+  document.getElementById('fdf').value=d.DataFinal||'';
+  document.getElementById('fprod').value=d.Produto||'';
+  document.getElementById('fqtd').value=d.QtdeKG||'';
+  document.getElementById('fvc').value=d.ValorUnitCliente||'';
+  document.getElementById('fvm').value=d.ValorUnitMinimo||'';
+  document.getElementById('fvt').value=d.ValorTotal||'';
+  document.getElementById('fkg').value=d.KGBriefingIdeal||'';
+  document.getElementById('fcomp').value=d.Comprador||'';
+  document.getElementById('ftel').value=d.Telefone||'';
+  document.getElementById('femail').value=d.Email||'';
+  document.getElementById('fcid').value=d.Cidade||'';
+  document.getElementById('fest').value=d.Estado||'';
+  document.getElementById('fbri').value=d.NoBriefing||'';
+  document.getElementById('fped').value=d.NoPedido||'';
+  document.getElementById('fop').value=d.NoOP||'';
+  document.getElementById('fobs').value=d.Observacao||'';
+  document.getElementById('dealMod').classList.add('open');
+}
 
 // Boot
 boot();
