@@ -601,6 +601,32 @@ service cloud.firestore {
   updateFBStatus(FB_READY);
 }
 
+async function syncToFirestore(){
+  if(!FB_READY){toast('Firebase não está conectado','err');return}
+  if(!confirm('Enviar todos os dados locais para o Firestore?'))return;
+  toast('Sincronizando...','ok');
+  let n=0;
+  const deals=await _idbAll('deals');
+  for(const d of deals){try{await _fsPut('deals',d);n++;}catch(e){console.error(e)}}
+  const tasks=await _idbAll('tasks');
+  for(const t of tasks){try{await _fsPut('tasks',t);}catch(e){}}
+  addLog('Sync Firestore: '+n+' negócios');
+  toast(n+' negócios sincronizados com Firestore ✓','ok');
+}
+
+async function pullFromFirestore(){
+  if(!FB_READY){toast('Firebase não está conectado','err');return}
+  if(!confirm('Baixar todos os dados do Firestore para o cache local?'))return;
+  try{
+    const deals=await _fsAll('deals');
+    for(const d of deals)await _idbPut('deals',d).catch(()=>{});
+    const tasks=await _fsAll('tasks');
+    for(const t of tasks)await _idbPut('tasks',t).catch(()=>{});
+    toast(deals.length+' negócios sincronizados localmente ✓','ok');
+    addLog('Pull Firestore: '+deals.length+' negócios');
+  }catch(e){toast('Erro: '+e.message,'err')}
+}
+
 async function retryFirebase(){
   toast('Reconectando ao Firebase...','ok');
   const ok = await initFirebase(FIREBASE_CONFIG);
