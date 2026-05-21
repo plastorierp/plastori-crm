@@ -465,18 +465,10 @@ async function boot(){
 
 // Catch unhandled errors and prevent app crash
 window.addEventListener('error', e=>{
-  console.error('App error:', e.message);
-  // If app is showing, don't crash - just show error toast
-  if(CU && document.getElementById('app').style.display==='flex'){
-    toast('Ocorreu um erro. Tente novamente.','err');
-    e.preventDefault();
-  }
+  console.error('[Plastori] App error:', e.message, e.filename, e.lineno);
 });
 window.addEventListener('unhandledrejection', e=>{
-  console.error('Unhandled promise:', e.reason);
-  if(CU && document.getElementById('app').style.display==='flex'){
-    e.preventDefault(); // prevent crash
-  }
+  console.error('[Plastori] Unhandled promise:', e.reason);
 });
 
 function updateFBStatus(online){
@@ -1757,7 +1749,7 @@ async function iaBuscaSearch(q){
               ${sBadge(d.Status)}
               <span style="font-size:11px;font-weight:700;color:var(--green);white-space:nowrap">${fMoney(d.ValorTotal)}</span>
             </div>`).join('')}
-          ${items.length>3?`<div style="padding:7px 14px;font-size:11px;color:var(--muted);border-top:1px solid var(--border)">+${items.length-3} mais negócios desta empresa</div>`:''}
+          ${items.length>3?'<div style="padding:7px 14px;font-size:11px;color:var(--muted);border-top:1px solid var(--border)">+'+(items.length-3)+' mais negócios desta empresa</div>':''}
         </div>
       `).join('')}
     </div>
@@ -1765,11 +1757,13 @@ async function iaBuscaSearch(q){
 }
 
 function highlightTerm(text, term){
-  if(!term||!text)return text;
-  const re=new RegExp('('+term.replace(/[.*+?^${}()|[\]\]/g,'\$&')+')','gi');
-  return text.replace(re,'<mark style="background:rgba(232,98,26,.3);color:var(--text);border-radius:2px;padding:0 1px">$1</mark>');
+  if(!term||!text)return text||'';
+  try{
+    const escaped=term.replace(/[-\/\\^$*+?.()|[\]{}]/g,'\\$&');
+    const re=new RegExp('('+escaped+')','gi');
+    return text.replace(re,'<mark style="background:rgba(232,98,26,.3);color:var(--text);border-radius:2px;padding:0 1px">$1</mark>');
+  }catch(e){return text;}
 }
-
 function iaVerEmpresa(empresa){
   FQ=empresa; FS=''; FV='';
   nav('negocios');
