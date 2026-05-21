@@ -407,23 +407,11 @@ const PPG=25;
 // =====================================================================
 async function boot(){
   loadFBConfig();
+
+  // 1. Open DB first — must complete before anything else
   await openDB();
 
-  // Garante credenciais no localStorage para a tela de config mostrar preenchido
-  if(!localStorage.getItem('plastori_fb_cfg')){
-    localStorage.setItem('plastori_fb_cfg', JSON.stringify(FIREBASE_CONFIG));
-  }
-
-  // Inicia Firebase automaticamente com credenciais embutidas
-  if(FB_CFG && FB_CFG.projectId){
-    const ok=await initFirebase(FB_CFG);
-    if(ok) updateFBStatus(true);
-    else updateFBStatus(false);
-  }else{
-    updateFBStatus(false);
-  }
-
-  // Seed usuários se IndexedDB vazio
+  // 2. Seed users immediately — login must work even without Firebase
   const users=await _idbAll('users');
   if(users.length===0){
     for(const[u,cfg]of Object.entries(DEFAULT_USERS)){
@@ -431,9 +419,47 @@ async function boot(){
     }
   }
 
-  // Seed negócios Excel se banco vazio (local + firestore)
-  const meta=await _idbGet('meta','seeded');
-  if(!meta){
+  // 3. Restore session immediately — don't wait for Firebase
+  const sess=localStorage.getItem('pcu');
+  if(sess){
+    try{
+      CU=JSON.parse(sess);
+      showApp();
+    }catch(e){
+      localStorage.removeItem('pcu');
+    }
+  }
+
+  // 4. Init Firebase in background — doesn't block login or session restore
+  if(!localStorage.getItem('plastori_fb_cfg')){
+    localStorage.setItem('plastori_fb_cfg', JSON.stringify(FIREBASE_CONFIG));
+  }
+  if(FB_CFG && FB_CFG.projectId){
+    initFirebase(FB_CFG).then(ok=>{
+      if(ok){
+        updateFBStatus(true);
+        // Seed deals to Firestore if first time
+        _idbGet('meta','seeded').then(meta=>{
+          if(!meta) seedDeals();
+        });
+      } else {
+        updateFBStatus(false);
+      }
+    }).catch(e=>{
+      console.warn('[Plastori] Firebase init failed:', e.message);
+      updateFBStatus(false);
+      // Still seed deals locally
+      _idbGet('meta','seeded').then(meta=>{ if(!meta) seedDeals(); });
+    });
+  } else {
+    updateFBStatus(false);
+    _idbGet('meta','seeded').then(meta=>{ if(!meta) seedDeals(); });
+  }
+}
+
+// Seed deals separately so it doesn't block boot
+async function seedDeals(){
+  try{
     let total=0;
     for(const[vendor,records]of Object.entries(SEED_ALL)){
       for(const d of records){
@@ -448,18 +474,8 @@ async function boot(){
     }
     await _idbPut('meta',{k:'seeded',v:true,ts:new Date().toISOString()});
     console.log('[Plastori] Seeded',total,'records');
-  }
-
-  // Restore session - wait for Firebase before showing app
-  const sess=localStorage.getItem('pcu');
-  if(sess){
-    try{
-      CU=JSON.parse(sess);
-      showApp();
-    }catch(e){
-      localStorage.removeItem('pcu');
-      console.warn('Session restore failed, clearing');
-    }
+  }catch(e){
+    console.warn('[Plastori] Seed failed:',e);
   }
 }
 
