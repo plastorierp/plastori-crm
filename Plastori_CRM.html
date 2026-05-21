@@ -328,7 +328,26 @@ async function _fsGet(col,id){
 // --- Roteador principal ---
 // deals/tasks/logs → Firestore quando disponível, IndexedDB como fallback
 // users/meta → sempre local (segurança: senhas nunca vão ao Firestore)
-const LOCAL_ONLY_STORES=['users','meta'];
+const LOCAL_ONLY_STORES=['meta']; // users now partially synced (flags only, never passwords)
+
+// Sync user's firstLogin flag to Firestore (no password data sent)
+async function syncUserFlagToFirestore(username, firstLogin){
+  if(!FB_READY) return;
+  try{
+    const {doc,setDoc,db:fdb}=window._FS;
+    await setDoc(doc(fdb,'user_flags',username),{username,firstLogin,updatedAt:new Date().toISOString()},{merge:true});
+  }catch(e){console.warn('syncUserFlag:',e.message)}
+}
+
+// Check if user already set password on another device
+async function getUserFlagFromFirestore(username){
+  if(!FB_READY) return null;
+  try{
+    const {doc,getDoc,db:fdb}=window._FS;
+    const snap=await getDoc(doc(fdb,'user_flags',username));
+    return snap.exists()?snap.data():null;
+  }catch(e){return null}
+}
 
 async function dbAll(st){
   if(FB_READY && !LOCAL_ONLY_STORES.includes(st)){
@@ -431,9 +450,34 @@ async function boot(){
     console.log('[Plastori] Seeded',total,'records');
   }
 
+  // Restore session - wait for Firebase before showing app
   const sess=localStorage.getItem('pcu');
-  if(sess){CU=JSON.parse(sess);showApp();}
+  if(sess){
+    try{
+      CU=JSON.parse(sess);
+      showApp();
+    }catch(e){
+      localStorage.removeItem('pcu');
+      console.warn('Session restore failed, clearing');
+    }
+  }
 }
+
+// Catch unhandled errors and prevent app crash
+window.addEventListener('error', e=>{
+  console.error('App error:', e.message);
+  // If app is showing, don't crash - just show error toast
+  if(CU && document.getElementById('app').style.display==='flex'){
+    toast('Ocorreu um erro. Tente novamente.','err');
+    e.preventDefault();
+  }
+});
+window.addEventListener('unhandledrejection', e=>{
+  console.error('Unhandled promise:', e.reason);
+  if(CU && document.getElementById('app').style.display==='flex'){
+    e.preventDefault(); // prevent crash
+  }
+});
 
 function updateFBStatus(online){
   const el=document.getElementById('fbBadge');
@@ -461,7 +505,21 @@ async function doLogin(){
   if(sHash(p)!==user.passHash){er.textContent='Senha incorreta.';return}
   CU=user;localStorage.setItem('pcu',JSON.stringify(user));
   addLog('Login: '+user.name);er.textContent='';
-  if(user.firstLogin){
+  // Check Firestore flag - user may have set password on another device
+  let finalFirstLogin = user.firstLogin;
+  if(user.firstLogin && FB_READY){
+    const flag = await getUserFlagFromFirestore(user.username);
+    if(flag && flag.firstLogin === false){
+      // Password was set on another device — update local record
+      const updatedUser = {...user, firstLogin:false};
+      await _idbPut('users', updatedUser);
+      CU = updatedUser;
+      localStorage.setItem('pcu', JSON.stringify(updatedUser));
+      finalFirstLogin = false;
+      toast('Senha validada via nuvem ✓','ok');
+    }
+  }
+  if(finalFirstLogin){
     document.getElementById('loginScreen').style.display='none';
     document.getElementById('setPassScreen').classList.add('open');
   }else showApp();
@@ -475,6 +533,8 @@ async function setNewPass(){
   const up={...CU,passHash:sHash(p1),firstLogin:false};
   await _idbPut('users',up);
   CU=up;localStorage.setItem('pcu',JSON.stringify(up));
+  // Sync flag to Firestore so other devices know password was set
+  await syncUserFlagToFirestore(CU.username, false);
   document.getElementById('setPassScreen').classList.remove('open');
   toast('Senha definida com sucesso!','ok');showApp();
 }
@@ -1387,159 +1447,414 @@ function calcTotal(){
 // IA ASSISTENTE — Sugestões inteligentes para vendedores
 // ================================================================
 async function rIA(){
-  document.getElementById('content').innerHTML='<div style="text-align:center;padding:40px;color:var(--muted)">🤖 Analisando dados...</div>';
-  
-  const deals = await getDeals();
-  const today = new Date();
-  
-  // 1. Clientes sem movimento há +5 dias
-  const clientLastContact = {};
-  deals.forEach(d=>{
-    const c = d.Empresa||'';
-    if(!c)return;
-    const dt = d.DataInicial||d.updatedAt||d.createdAt;
-    if(!dt)return;
-    const date = new Date(dt);
-    if(!clientLastContact[c]||date>clientLastContact[c].date){
-      clientLastContact[c]={date,status:d.Status,produto:d.Produto,valor:d.ValorTotal};
-    }
+  document.getElementById('content').innerHTML=`
+    <div class="ptitle">🤖 Assistente IA</div>
+    <div class="psub">Alertas inteligentes + Busca em todo o sistema</div>
+    <div class="tabs" id="iaTabs">
+      <button class="tab active" onclick="switchIA('alertas',this)">🚨 Alertas</button>
+      <button class="tab" onclick="switchIA('busca',this)">🔍 Busca Inteligente</button>
+      <button class="tab" onclick="switchIA('painel',this)">📊 Painel IA</button>
+    </div>
+    <div id="ia-alertas"></div>
+    <div id="ia-busca" style="display:none"></div>
+    <div id="ia-painel" style="display:none"></div>
+  `;
+  await renderIAAlerts();
+}
+
+function switchIA(tab, el){
+  document.querySelectorAll('#iaTabs .tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  ['alertas','busca','painel'].forEach(t=>{
+    const el2=document.getElementById('ia-'+t);
+    if(el2) el2.style.display=t===tab?'':'none';
   });
-  
-  const semMovimento=Object.entries(clientLastContact)
-    .map(([name,info])=>({name,days:Math.floor((today-info.date)/(1000*60*60*24)),
-      status:info.status,produto:info.produto,valor:info.valor}))
-    .filter(c=>c.days>=5&&!['aprovado'].includes((c.status||'').toLowerCase()))
+  if(tab==='busca') renderIABusca();
+  if(tab==='painel') renderIAPainel();
+}
+
+async function renderIAAlerts(){
+  const el=document.getElementById('ia-alertas');
+  if(!el) return;
+  el.innerHTML='<div style="padding:20px;text-align:center;color:var(--muted)">🤖 Analisando dados...</div>';
+
+  const deals=await getDeals();
+  const today=new Date(); today.setHours(0,0,0,0);
+
+  // === ALERTA 1: Clientes sem contato há +5 dias ===
+  const lastContact={};
+  deals.forEach(d=>{
+    const c=d.Empresa||'';if(!c)return;
+    const dt=new Date(d.DataInicial||d.updatedAt||d.createdAt||'');
+    if(!lastContact[c]||dt>lastContact[c].date)
+      lastContact[c]={date:dt,status:d.Status,produto:d.Produto,valor:d.ValorTotal,vendedor:d.Vendedor};
+  });
+  const semContato=Object.entries(lastContact)
+    .map(([n,i])=>({name:n,days:Math.floor((today-i.date)/(864e5)),
+      status:i.status,produto:i.produto,valor:i.valor,vendedor:i.vendedor}))
+    .filter(c=>c.days>=5&&(c.status||'').toLowerCase()!=='aprovado'&&c.days<365)
     .sort((a,b)=>b.days-a.days).slice(0,10);
 
-  // 2. Maiores oportunidades em aberto
-  const emAberto=deals
-    .filter(d=>{const s=(d.Status||'').toLowerCase();return s==='prospecção'||s==='orçamento'})
-    .filter(d=>parseFloat(d.ValorTotal)>0)
-    .sort((a,b)=>(parseFloat(b.ValorTotal)||0)-(parseFloat(a.ValorTotal)||0))
-    .slice(0,8);
+  // === ALERTA 2: Orçamentos sem resposta há +3 dias ===
+  const orcSemResposta=deals
+    .filter(d=>(d.Status||'').toLowerCase()==='orçamento'&&d.DataInicial)
+    .map(d=>({...d,days:Math.floor((today-new Date(d.DataInicial))/(864e5))}))
+    .filter(d=>d.days>=3).sort((a,b)=>b.days-a.days).slice(0,8);
 
-  // 3. Clientes com histórico de aprovação (potencial recompra)
-  const aprovados={};
+  // === ALERTA 3: Oportunidades de alto valor paradas ===
+  const altasParadas=deals
+    .filter(d=>{
+      const s=(d.Status||'').toLowerCase();
+      return (s==='prospecção'||s==='orçamento')&&parseFloat(d.ValorTotal)>=5000&&d.DataInicial;
+    })
+    .map(d=>({...d,days:Math.floor((today-new Date(d.DataInicial))/(864e5))}))
+    .filter(d=>d.days>=5)
+    .sort((a,b)=>(parseFloat(b.ValorTotal)||0)-(parseFloat(a.ValorTotal)||0)).slice(0,6);
+
+  // === ALERTA 4: Clientes aprovados com potencial recompra ===
+  const aprovMap={};
   deals.filter(d=>(d.Status||'').toLowerCase()==='aprovado').forEach(d=>{
     const c=d.Empresa||'';
-    if(!aprovados[c])aprovados[c]={count:0,total:0,lastDate:null,produto:d.Produto};
-    aprovados[c].count++;
-    aprovados[c].total+=(parseFloat(d.ValorTotal)||0);
+    if(!aprovMap[c])aprovMap[c]={total:0,count:0,last:new Date(0),produto:d.Produto};
+    aprovMap[c].total+=(parseFloat(d.ValorTotal)||0);
+    aprovMap[c].count++;
     const dt=new Date(d.DataInicial||'');
-    if(!aprovados[c].lastDate||dt>aprovados[c].lastDate)aprovados[c].lastDate=dt;
+    if(dt>aprovMap[c].last)aprovMap[c].last=dt;
   });
-  const recompra=Object.entries(aprovados)
-    .map(([name,info])=>({name,...info,
-      daysSince:Math.floor((today-info.lastDate)/(1000*60*60*24))}))
-    .filter(c=>c.daysSince>=10)
-    .sort((a,b)=>b.total-a.total).slice(0,8);
+  const recompra=Object.entries(aprovMap)
+    .map(([n,i])=>({name:n,...i,days:Math.floor((today-i.last)/(864e5))}))
+    .filter(c=>c.days>=15&&c.count>=1)
+    .sort((a,b)=>b.total-a.total).slice(0,6);
 
-  // 4. Negócios perdidos recentes (possível recuperação)
-  const perdidos=deals
-    .filter(d=>{const s=(d.Status||'').toLowerCase();return s.startsWith('perdido')})
-    .filter(d=>d.DataInicial&&Math.floor((today-new Date(d.DataInicial))/(1000*60*60*24))<=30)
-    .sort((a,b)=>(parseFloat(b.ValorTotal)||0)-(parseFloat(a.ValorTotal)||0))
-    .slice(0,6);
+  // === ALERTA 5: Metas do dia ===
+  const hoje=new Date().toISOString().slice(0,10);
+  const tasks=await dbAll('tasks');
+  const tarefasHoje=tasks.filter(t=>t.date===hoje&&!t.done&&(!t.uid||t.uid===CU.username));
+  const tarefasAtrasadas=tasks.filter(t=>t.date&&t.date<hoje&&!t.done&&(!t.uid||t.uid===CU.username));
 
-  // 5. Stats resumo
-  const totalAberto=emAberto.reduce((s,d)=>s+(parseFloat(d.ValorTotal)||0),0);
-  const aprovTot=deals.filter(d=>(d.Status||'').toLowerCase()==='aprovado')
-    .reduce((s,d)=>s+(parseFloat(d.ValorTotal)||0),0);
+  // Counts for summary
+  const totalAlertas=semContato.length+orcSemResposta.length+altasParadas.length+tarefasAtrasadas.length;
 
-  document.getElementById('content').innerHTML=`
-    <div class="ptitle">🤖 Assistente de Vendas IA</div>
-    <div class="psub">Análise inteligente baseada nos seus dados · Atualizado agora</div>
-
-    <!-- ALERTAS URGENTES -->
-    ${semMovimento.length>0?`
-    <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:12px;padding:18px;margin-bottom:16px">
-      <div style="font-size:13px;font-weight:700;color:var(--red);margin-bottom:12px">
-        🚨 ${semMovimento.length} clientes sem contato há mais de 5 dias
+  el.innerHTML=`
+    <!-- RESUMO RÁPIDO -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:18px">
+      <div style="background:${semContato.length?'rgba(239,68,68,.1)':'rgba(34,197,94,.08)'};border:1px solid ${semContato.length?'rgba(239,68,68,.3)':'rgba(34,197,94,.2)'};border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:24px;font-weight:700;color:${semContato.length?'var(--red)':'var(--green)'}">${semContato.length}</div>
+        <div style="font-size:11px;color:var(--muted)">Sem contato +5 dias</div>
       </div>
-      ${semMovimento.map(c=>`
-        <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border-radius:8px;margin-bottom:6px">
-          <div style="flex:1">
-            <div style="font-size:13px;font-weight:600">${c.name}</div>
-            <div style="font-size:11px;color:var(--muted)">${c.produto||'–'} · ${sBadge(c.status)}</div>
-          </div>
-          <div style="text-align:right">
-            <div style="font-size:12px;font-weight:700;color:var(--red)">${c.days} dias</div>
-            <div style="font-size:11px;color:var(--muted)">${fMoney(c.valor)}</div>
-          </div>
-          <button class="btn btn-brand btn-sm" onclick="criarTarefaIA('${c.name.replace(/'/g,"\'")}','Follow-up urgente')">+ Tarefa</button>
-        </div>
-      `).join('')}
-    </div>`:
-    '<div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:12px;padding:14px;margin-bottom:16px;font-size:13px;color:var(--green)">✅ Todos os clientes foram contatados nos últimos 5 dias!</div>'}
-
-    <div class="cgrid">
-      <!-- MAIORES OPORTUNIDADES -->
-      <div class="cc">
-        <div class="cctitle">💰 Maiores Oportunidades em Aberto</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Total: ${fMoney(totalAberto)}</div>
-        ${emAberto.length===0?'<div style="color:var(--dim);font-size:12px">Nenhuma oportunidade aberta</div>':
-          emAberto.map(d=>`
-            <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border-radius:7px;margin-bottom:5px">
-              <div style="flex:1;min-width:0">
-                <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.Empresa||'–'}</div>
-                <div style="font-size:10px;color:var(--muted)">${sBadge(d.Status)}</div>
-              </div>
-              <div style="font-size:12px;font-weight:700;color:var(--green);white-space:nowrap">${fMoney(d.ValorTotal)}</div>
-              <button class="btn btn-ghost btn-sm" onclick="criarTarefaIA('${(d.Empresa||'').replace(/'/g,"\'")}','Follow-up oportunidade')">+ Tarefa</button>
-            </div>
-          `).join('')}
+      <div style="background:${orcSemResposta.length?'rgba(245,158,11,.1)':'rgba(34,197,94,.08)'};border:1px solid ${orcSemResposta.length?'rgba(245,158,11,.3)':'rgba(34,197,94,.2)'};border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:24px;font-weight:700;color:${orcSemResposta.length?'var(--yellow)':'var(--green)'}">${orcSemResposta.length}</div>
+        <div style="font-size:11px;color:var(--muted)">Orçamentos parados</div>
       </div>
-
-      <!-- RECOMPRA -->
-      <div class="cc">
-        <div class="cctitle">🔄 Potencial Recompra</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Clientes aprovados sem contato recente</div>
-        ${recompra.length===0?'<div style="color:var(--dim);font-size:12px">Nenhum cliente identificado</div>':
-          recompra.map(c=>`
-            <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border-radius:7px;margin-bottom:5px">
-              <div style="flex:1;min-width:0">
-                <div style="font-size:12px;font-weight:600">${c.name}</div>
-                <div style="font-size:10px;color:var(--muted)">${c.count}x comprou · ${c.daysSince} dias atrás</div>
-              </div>
-              <div style="font-size:12px;font-weight:700;color:var(--brand);white-space:nowrap">${fMoney(c.total)}</div>
-              <button class="btn btn-ghost btn-sm" onclick="criarTarefaIA('${c.name.replace(/'/g,"\'")}','Contato recompra')">+ Tarefa</button>
-            </div>
-          `).join('')}
+      <div style="background:${altasParadas.length?'rgba(232,98,26,.1)':'rgba(34,197,94,.08)'};border:1px solid ${altasParadas.length?'rgba(232,98,26,.3)':'rgba(34,197,94,.2)'};border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:24px;font-weight:700;color:${altasParadas.length?'var(--brand)':'var(--green)'}">${altasParadas.length}</div>
+        <div style="font-size:11px;color:var(--muted)">Alto valor parado</div>
+      </div>
+      <div style="background:${tarefasAtrasadas.length?'rgba(139,92,246,.1)':'rgba(34,197,94,.08)'};border:1px solid ${tarefasAtrasadas.length?'rgba(139,92,246,.3)':'rgba(34,197,94,.2)'};border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:24px;font-weight:700;color:${tarefasAtrasadas.length?'var(--purple)':'var(--green)'}">${tarefasAtrasadas.length}</div>
+        <div style="font-size:11px;color:var(--muted)">Tarefas atrasadas</div>
       </div>
     </div>
 
-    <!-- PERDIDOS RECUPERÁVEIS -->
-    ${perdidos.length>0?`
-    <div class="cc" style="margin-bottom:16px">
-      <div class="cctitle">♻️ Negócios Perdidos Recentes — Possível Recuperação (últimos 30 dias)</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px;margin-top:4px">
-        ${perdidos.map(d=>`
-          <div style="padding:10px 12px;background:var(--surface2);border-radius:8px;border-left:3px solid var(--red)">
-            <div style="font-size:12px;font-weight:600">${d.Empresa||'–'}</div>
-            <div style="font-size:10px;color:var(--muted);margin-top:2px">${d.Produto||''}</div>
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
-              <span style="font-size:11px;color:var(--red)">${sBadge(d.Status)}</span>
-              <span style="font-size:12px;font-weight:700;color:var(--text)">${fMoney(d.ValorTotal)}</span>
-            </div>
-            <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:6px" onclick="criarTarefaIA('${(d.Empresa||'').replace(/'/g,"\'")}','Tentativa recuperação')">+ Criar Follow-up</button>
-          </div>
-        `).join('')}
-      </div>
-    </div>`:''
-    }
+    ${totalAlertas===0?`<div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:12px;padding:20px;text-align:center;color:var(--green);font-weight:600">
+      ✅ Tudo em dia! Nenhum alerta pendente.
+    </div>`:''}
 
-    <!-- RESUMO IA -->
-    <div class="cc">
-      <div class="cctitle">📋 Resumo de Recomendações</div>
-      <div style="font-size:12.5px;line-height:2;color:var(--muted)">
-        ${semMovimento.length>0?`<div>🔴 <strong style="color:var(--text)">${semMovimento.length} clientes</strong> precisam de contato urgente</div>`:''}
-        ${emAberto.length>0?`<div>💰 <strong style="color:var(--text)">${emAberto.length} oportunidades</strong> abertas valendo ${fMoney(totalAberto)}</div>`:''}
-        ${recompra.length>0?`<div>🔄 <strong style="color:var(--text)">${recompra.length} clientes</strong> com potencial de recompra</div>`:''}
-        ${perdidos.length>0?`<div>♻️ <strong style="color:var(--text)">${perdidos.length} negócios perdidos</strong> recentes — vale tentar recuperar</div>`:''}
-        <div style="margin-top:8px;padding:10px;background:rgba(232,98,26,.08);border-radius:8px;border:1px solid rgba(232,98,26,.2);color:var(--text)">
-          💡 <strong>Dica do dia:</strong> Foque primeiro nos clientes com oportunidades de maior valor em aberto. Um follow-up no momento certo pode ser a diferença entre ganhar ou perder o negócio.
+    <!-- TAREFAS DE HOJE -->
+    ${tarefasHoje.length?`
+    <div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:12px;padding:16px;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:10px">📅 ${tarefasHoje.length} tarefa(s) para hoje</div>
+      ${tarefasHoje.map(t=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface2);border-radius:8px;margin-bottom:5px">
+          <span style="font-size:13px">✅</span>
+          <div style="flex:1"><div style="font-size:12px;font-weight:600">${t.title}</div>
+          <div style="font-size:10px;color:var(--muted)">${t.client||''}</div></div>
+          <button class="btn btn-brand btn-sm" onclick="nav('tarefas')">Ver</button>
+        </div>`).join('')}
+    </div>`:''}
+
+    <!-- SEM CONTATO -->
+    ${semContato.length?`
+    <div style="background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.2);border-radius:12px;padding:16px;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;color:var(--red);margin-bottom:10px">🚨 Clientes sem contato há mais de 5 dias</div>
+      ${semContato.map(c=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border-radius:8px;margin-bottom:6px">
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:600">${c.name}</div>
+            <div style="font-size:10px;color:var(--muted)">${c.produto||'–'} · ${sBadge(c.status)}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-size:12px;font-weight:700;color:var(--red)">${c.days} dias</div>
+            <div style="font-size:10px;color:var(--muted)">${fMoney(c.valor)}</div>
+          </div>
+          <button class="btn btn-brand btn-sm" onclick="criarTarefaIA('${c.name.replace(/'/g,"\'")}','Follow-up urgente')">+ Tarefa</button>
+        </div>`).join('')}
+    </div>`:''}
+
+    <!-- ORÇAMENTOS PARADOS -->
+    ${orcSemResposta.length?`
+    <div style="background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.2);border-radius:12px;padding:16px;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;color:var(--yellow);margin-bottom:10px">📄 Orçamentos sem resposta há +3 dias</div>
+      ${orcSemResposta.map(d=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border-radius:8px;margin-bottom:6px">
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:600">${d.Empresa||'–'}</div>
+            <div style="font-size:10px;color:var(--muted)">${d.Produto||''}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-size:12px;font-weight:700;color:var(--yellow)">${d.days} dias</div>
+            <div style="font-size:11px;color:var(--green);font-weight:600">${fMoney(d.ValorTotal)}</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="criarTarefaIA('${(d.Empresa||'').replace(/'/g,"\'")}','Cobrar orçamento')">+ Tarefa</button>
+        </div>`).join('')}
+    </div>`:''}
+
+    <!-- ALTO VALOR PARADO -->
+    ${altasParadas.length?`
+    <div style="background:rgba(232,98,26,.07);border:1px solid rgba(232,98,26,.2);border-radius:12px;padding:16px;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;color:var(--brand);margin-bottom:10px">💰 Oportunidades de alto valor paradas (+R$5.000)</div>
+      ${altasParadas.map(d=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border-radius:8px;margin-bottom:6px">
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:600">${d.Empresa||'–'}</div>
+            <div style="font-size:10px;color:var(--muted)">${d.Produto||''} · ${sBadge(d.Status)}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-size:12px;font-weight:700;color:var(--brand)">${d.days} dias</div>
+            <div style="font-size:11px;color:var(--green);font-weight:700">${fMoney(d.ValorTotal)}</div>
+          </div>
+          <button class="btn btn-brand btn-sm" onclick="criarTarefaIA('${(d.Empresa||'').replace(/'/g,"\'")}','Follow-up alto valor')">+ Tarefa</button>
+        </div>`).join('')}
+    </div>`:''}
+
+    <!-- RECOMPRA -->
+    ${recompra.length?`
+    <div style="background:rgba(20,184,166,.07);border:1px solid rgba(20,184,166,.2);border-radius:12px;padding:16px;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;color:var(--teal);margin-bottom:10px">🔄 Potencial de Recompra — clientes aprovados sem contato recente</div>
+      ${recompra.map(c=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border-radius:8px;margin-bottom:6px">
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:600">${c.name}</div>
+            <div style="font-size:10px;color:var(--muted)">${c.count}x comprou · último: ${c.days} dias atrás</div>
+          </div>
+          <div style="font-size:12px;font-weight:700;color:var(--green);flex-shrink:0">${fMoney(c.total)}</div>
+          <button class="btn btn-ghost btn-sm" onclick="criarTarefaIA('${c.name.replace(/'/g,"\'")}','Contato recompra')">+ Tarefa</button>
+        </div>`).join('')}
+    </div>`:''}
+  `;
+}
+
+// ================================================================
+// IA BUSCA INTELIGENTE
+// ================================================================
+function renderIABusca(){
+  const el=document.getElementById('ia-busca');
+  if(!el)return;
+  el.innerHTML=`
+    <div style="margin-bottom:16px">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:10px">
+        Busque qualquer informação do sistema — empresas, produtos, valores, status, cidades, compradores...
+      </div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="iaBuscaInput" class="fld" style="flex:1;font-size:14px;padding:12px 16px"
+          placeholder="Ex: Balmak, saco PEBD, aprovado SP, R$ 5000..."
+          oninput="iaBuscaSearch(this.value)"
+          onkeydown="if(event.key==='Enter')iaBuscaSearch(this.value)">
+        <button class="btn btn-brand" onclick="iaBuscaSearch(document.getElementById('iaBuscaInput').value)">🔍 Buscar</button>
+      </div>
+    </div>
+    <div id="iaBuscaResults"></div>
+  `;
+  setTimeout(()=>document.getElementById('iaBuscaInput')?.focus(),100);
+}
+
+async function iaBuscaSearch(q){
+  const el=document.getElementById('iaBuscaResults');
+  if(!el||!q||q.trim().length<2)return;
+  el.innerHTML='<div style="color:var(--muted);font-size:13px;padding:10px">🔍 Buscando...</div>';
+
+  const deals=await getDeals();
+  const tasks=await dbAll('tasks');
+  const term=q.toLowerCase().trim();
+
+  // Search deals
+  const dealResults=deals.filter(d=>
+    (d.Empresa||'').toLowerCase().includes(term)||
+    (d.Produto||'').toLowerCase().includes(term)||
+    (d.Status||'').toLowerCase().includes(term)||
+    (d.Cidade||'').toLowerCase().includes(term)||
+    (d.Estado||'').toLowerCase().includes(term)||
+    (d.Comprador||'').toLowerCase().includes(term)||
+    (d.NoBriefing||'').toLowerCase().includes(term)||
+    (d.Observacao||'').toLowerCase().includes(term)||
+    (d.ValorTotal||'').toString().includes(term)||
+    (d.Vendedor||'').toLowerCase().includes(term)
+  ).slice(0,20);
+
+  // Search tasks
+  const taskResults=tasks.filter(t=>
+    (!t.uid||t.uid===CU.username)&&(
+      (t.title||'').toLowerCase().includes(term)||
+      (t.client||'').toLowerCase().includes(term)
+    )
+  ).slice(0,5);
+
+  // Group deal results by company
+  const byCompany={};
+  dealResults.forEach(d=>{
+    const c=d.Empresa||'–';
+    if(!byCompany[c])byCompany[c]=[];
+    byCompany[c].push(d);
+  });
+
+  const total=dealResults.length+taskResults.length;
+
+  if(total===0){
+    el.innerHTML=`<div style="text-align:center;padding:30px;color:var(--muted)">
+      <div style="font-size:32px;margin-bottom:8px">🔍</div>
+      <div>Nenhum resultado para "<strong style="color:var(--text)">${q}</strong>"</div>
+      <div style="font-size:12px;margin-top:6px">Tente outro termo ou verifique a ortografia</div>
+    </div>`;
+    return;
+  }
+
+  el.innerHTML=`
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">
+      <strong style="color:var(--text)">${total}</strong> resultado(s) para "<strong style="color:var(--brand)">${q}</strong>"
+    </div>
+
+    ${taskResults.length?`
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">✅ Tarefas (${taskResults.length})</div>
+      ${taskResults.map(t=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border-radius:8px;margin-bottom:6px;cursor:pointer" onclick="nav('tarefas')">
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:600">${highlightTerm(t.title||'',term)}</div>
+            <div style="font-size:10px;color:var(--muted)">${t.client||''} · ${t.date||''}</div>
+          </div>
+          <span class="badge ${t.done?'bg':'by'}">${t.done?'Concluída':'Pendente'}</span>
+          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();nav('tarefas')">→ Ver</button>
+        </div>`).join('')}
+    </div>`:''}
+
+    <div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">💼 Negócios (${dealResults.length})</div>
+      ${Object.entries(byCompany).map(([company,items])=>`
+        <div style="background:var(--surface2);border-radius:10px;margin-bottom:8px;overflow:hidden">
+          <div style="padding:10px 14px;background:var(--surface3);display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="iaVerEmpresa('${company.replace(/'/g,"\'")}')">
+            <div>
+              <span style="font-size:13px;font-weight:700">${highlightTerm(company,term)}</span>
+              <span style="font-size:10px;color:var(--muted);margin-left:8px">${items.length} negócio(s)</span>
+            </div>
+            <button class="btn btn-brand btn-sm" onclick="event.stopPropagation();iaVerEmpresa('${company.replace(/'/g,"\'")}')">→ Ver Negócios</button>
+          </div>
+          ${items.slice(0,3).map(d=>`
+            <div style="padding:9px 14px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${highlightTerm(d.Produto||'–',term)}</div>
+                <div style="font-size:10px;color:var(--muted)">${d.DataInicial||'–'} · ${d.Cidade||''} ${d.Estado||''}</div>
+              </div>
+              ${sBadge(d.Status)}
+              <span style="font-size:11px;font-weight:700;color:var(--green);white-space:nowrap">${fMoney(d.ValorTotal)}</span>
+            </div>`).join('')}
+          ${items.length>3?`<div style="padding:7px 14px;font-size:11px;color:var(--muted);border-top:1px solid var(--border)">+${items.length-3} mais negócios desta empresa</div>`:''}
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function highlightTerm(text, term){
+  if(!term||!text)return text;
+  const re=new RegExp('('+term.replace(/[.*+?^${}()|[\]\]/g,'\$&')+')','gi');
+  return text.replace(re,'<mark style="background:rgba(232,98,26,.3);color:var(--text);border-radius:2px;padding:0 1px">$1</mark>');
+}
+
+function iaVerEmpresa(empresa){
+  FQ=empresa; FS=''; FV='';
+  nav('negocios');
+}
+
+// ================================================================
+// IA PAINEL — Análise do painel do vendedor atual
+// ================================================================
+async function renderIAPainel(){
+  const el=document.getElementById('ia-painel');
+  if(!el)return;
+  el.innerHTML='<div style="padding:20px;text-align:center;color:var(--muted)">Analisando seu painel...</div>';
+
+  const deals=await getDeals();
+  const apv=deals.filter(d=>(d.Status||'').toLowerCase()==='aprovado');
+  const perdidos=deals.filter(d=>(d.Status||'').toLowerCase().startsWith('perdido'));
+  const pros=deals.filter(d=>(d.Status||'').toLowerCase()==='prospecção');
+  const orc=deals.filter(d=>(d.Status||'').toLowerCase()==='orçamento');
+  const totalRev=apv.reduce((s,d)=>s+(parseFloat(d.ValorTotal)||0),0);
+  const conv=deals.length?(apv.length/deals.length*100).toFixed(1):0;
+
+  // Top produto
+  const prodMap={};
+  apv.forEach(d=>{const p=d.Produto||'–';prodMap[p]=(prodMap[p]||0)+(parseFloat(d.ValorTotal)||0)});
+  const topProd=Object.entries(prodMap).sort((a,b)=>b[1]-a[1]).slice(0,3);
+
+  // Performance score
+  const score=Math.min(100,Math.round(parseFloat(conv)*1.2 + (apv.length>5?20:apv.length*4)));
+
+  // Suggestions based on data
+  const sugestoes=[];
+  if(parseFloat(conv)<30) sugestoes.push({icon:'📈',txt:'Sua taxa de conversão está abaixo de 30%. Foque em qualificar melhor os leads antes de avançar para orçamento.'});
+  if(orc.length>5) sugestoes.push({icon:'⏰',txt:`Você tem ${orc.length} orçamentos em aberto. Priorize fechar os mais antigos esta semana.`});
+  if(pros.length>10) sugestoes.push({icon:'🎯',txt:`${pros.length} prospecções abertas é um número alto. Considere priorizar as de maior valor potencial.`});
+  if(perdidos.length>apv.length) sugestoes.push({icon:'🔄',txt:'Você está perdendo mais negócios do que fechando. Revise os motivos e ajuste sua abordagem.'});
+  if(apv.length>0&&conv>50) sugestoes.push({icon:'🏆',txt:`Taxa de conversão de ${conv}% é excelente! Continue com a mesma estratégia.`});
+  if(sugestoes.length===0) sugestoes.push({icon:'✅',txt:'Seu painel está equilibrado. Continue monitorando os alertas diariamente.'});
+
+  el.innerHTML=`
+    <div class="cgrid" style="margin-bottom:16px">
+      <div class="cc">
+        <div class="cctitle">📊 Resumo do Seu Painel</div>
+        <div style="font-size:12.5px;line-height:2.2;color:var(--muted)">
+          <div>Total de negócios: <strong style="color:var(--text)">${deals.length}</strong></div>
+          <div>Aprovados: <strong style="color:var(--green)">${apv.length}</strong></div>
+          <div>Em prospecção: <strong style="color:var(--blue)">${pros.length}</strong></div>
+          <div>Orçamentos abertos: <strong style="color:var(--yellow)">${orc.length}</strong></div>
+          <div>Perdidos: <strong style="color:var(--red)">${perdidos.length}</strong></div>
+          <div>Taxa de conversão: <strong style="color:var(--text)">${conv}%</strong></div>
+          <div>Faturamento total: <strong style="color:var(--green)">${fMoney(totalRev)}</strong></div>
         </div>
       </div>
+      <div class="cc">
+        <div class="cctitle">🏅 Score de Performance</div>
+        <div style="text-align:center;padding:16px 0">
+          <div style="font-size:56px;font-weight:700;color:${score>=70?'var(--green)':score>=40?'var(--yellow)':'var(--red)'}">${score}</div>
+          <div style="font-size:12px;color:var(--muted)">de 100 pontos</div>
+          <div style="margin-top:12px">
+            <div style="height:8px;background:var(--surface3);border-radius:4px;overflow:hidden">
+              <div style="height:100%;width:${score}%;background:${score>=70?'var(--green)':score>=40?'var(--yellow)':'var(--red)'};border-radius:4px;transition:width 1s ease"></div>
+            </div>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:8px">${score>=70?'Excelente desempenho!':score>=40?'Desempenho moderado':'Precisa de atenção'}</div>
+        </div>
+      </div>
+    </div>
+
+    ${topProd.length?`
+    <div class="cc" style="margin-bottom:14px">
+      <div class="cctitle">🏆 Seus Top Produtos (por faturamento)</div>
+      ${topProd.map(([p,v],i)=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border-radius:8px;margin-bottom:6px">
+          <div style="font-size:16px;font-weight:700;color:var(--brand);width:24px">#${i+1}</div>
+          <div style="flex:1;font-size:12px;font-weight:500">${p}</div>
+          <div style="font-size:12px;font-weight:700;color:var(--green)">${fMoney(v)}</div>
+        </div>`).join('')}
+    </div>`:''}
+
+    <div class="cc">
+      <div class="cctitle">💡 Sugestões da IA para você</div>
+      ${sugestoes.map(s=>`
+        <div style="display:flex;gap:10px;padding:10px 12px;background:var(--surface2);border-radius:8px;margin-bottom:8px">
+          <span style="font-size:18px;flex-shrink:0">${s.icon}</span>
+          <div style="font-size:12.5px;color:var(--text);line-height:1.5">${s.txt}</div>
+        </div>`).join('')}
     </div>
   `;
 }
